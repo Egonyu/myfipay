@@ -1,0 +1,7 @@
+.env
+*.log
+backups/
+edge-agent/bin/
+api/bin/
+dashboard/.next/
+dashboard/node_modules/
