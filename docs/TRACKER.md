@@ -19,9 +19,10 @@
 | M4 Vouchers + cash sessions | ✅ | Batches, redemption, PDF/QR, cash grant — all in API |
 | M4.5 Agent network (API) | ✅ 2026-07-18 | Full API + DB live; UI pending |
 | M5 SSL + domain + Nairobi prod | ⏳ **unblocked** | `myfipay.com` purchased (Cloudflare, 2026-07-18); NS active, **no A records yet** — next: A record → 170.64.177.20, nginx server_name, SSL |
+| M5.5 Public site + self-serve onboarding | ❌ | Landing page, signup/onboarding UI, KYC UX, router setup wizard — see §3 journey walkthrough (2026-07-18) |
 | M6 Mobile app (Expo) | ❌ | Not started |
 | M7 Edge agent (Pi/CHR) | ❌ | Not started |
-| M8 Pilot launch — Soroti | ❌ | Blocked on: M3 recovery, MikroTik live test, ZengaPay prod |
+| M8 Pilot launch — Soroti | ❌ | Blocked on: M3 recovery, MikroTik live test, ZengaPay prod, **founder dry-run (§3)** |
 
 ---
 
@@ -54,7 +55,26 @@
 
 ---
 
-## 3. Prioritized Backlog
+## 3. Customer Journey Gaps (walkthrough 2026-07-18)
+
+Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs up like any other operator. Journey: discover → sign up → get approved → set up → connect router → sell → get paid.
+
+| Stage | Exists today | Gap |
+|---|---|---|
+| 1. Discover (`myfipay.com`) | Nothing — nginx `/` 302s to the **demo captive portal**; no A record yet | **No landing page at all** (pitch, how-it-works, pricing/fees, sign-up CTA). Never tracked before this walkthrough |
+| 2. Sign up | `POST /api/auth/register` verified working | No web page to call it (dashboard empty); no email verification; no ToS/privacy to accept; no password reset |
+| 3. KYC review | Account lands `pending_kyc`, login blocked; admin approve/reject API | Black hole: nothing to upload, nothing for admin to review against, and the promised "you will be notified" has **no notification mechanism** (zero email/SMS infra in the system) |
+| 4. First login / setup | Location, plan, branding, voucher APIs all live | No onboarding UI or checklist ("create plan → connect router → test") |
+| 5. Connect router (**activation**) | `devices` table exists, **unused**; `clients.conf` hand-edited on server | **Biggest gap**: no device self-registration, no per-device RADIUS secret, no generated MikroTik config script, no walled-garden instructions, no connection test. Today this step requires Daniel SSH-ing into the server — consultancy, not SaaS |
+| 6. First sale | Pay → webhook → WiFi grant verified end-to-end (sandbox) | ZengaPay prod blocked; no receipt to the WiFi buyer |
+| 7. Get paid | Payout request + admin queue APIs | No UI; disbursement is manual mark-paid; 8% platform fee disclosed nowhere except source code — no statement/fee breakdown for the operator |
+| 8. Ongoing trust | — | No support channel or help docs; no notifications of any kind |
+
+**Litmus test (gates M8):** founder dry-run — Daniel signs up at myfipay.com as a normal operator and reaches a first paid WiFi session **without SSH-ing into the server**.
+
+---
+
+## 4. Prioritized Backlog
 
 ### P0 — blocking pilot (M8)
 | # | Task | Owner | Notes |
@@ -64,13 +84,18 @@
 | 3 | MikroTik live test | Daniel + Claude | Real router → RADIUS; everything so far is `radtest` only |
 | 4 | ZengaPay production account | Daniel | Then: live token + HMAC secret in `.env` |
 | 5 | Domain + SSL | Daniel + Claude | `myfipay.com` bought (Cloudflare); next: A record → 170.64.177.20, then nginx + SSL (Cloudflare proxy or certbot) |
+| 6 | Landing page + signup/login UI at `myfipay.com` root | Claude | Root currently 302s to demo portal; front door of the funnel (§3 stages 1–2) |
+| 7 | Router self-onboarding wizard | Claude | Register device in dashboard → per-device RADIUS secret → generated MikroTik setup script → connection test. Uses the dormant `devices` table; also closes the P1 `clients.conf` lockdown security item (§3 stage 5) |
+| 8 | Founder dry-run | Daniel | Sign up → first paid session with zero server access. Gates M8 (§3 litmus test) |
 
 ### P1 — before real money flows
 - [ ] Webhook IP allowlist middleware
 - [ ] Rotate admin password + RADIUS secret (pre-scrub exposure)
 - [ ] CORS pinned origins (prod mode)
 - [ ] Offsite backups to DO Spaces
-- [ ] NAS device registration flow → per-device RADIUS secrets, `clients.conf` lockdown
+- [ ] ~~NAS device registration flow~~ → folded into P0 #7 (router self-onboarding wizard)
+- [ ] Email delivery infra (SMTP/SES/Resend): KYC approve/reject notification, password reset, receipts — prerequisite for several P2 items and for the KYC flow's "you will be notified" promise
+- [ ] ToS + privacy policy + published fee schedule (8% platform, 3% agent) — trust/legal before real money
 - [ ] Login attempt rate limiting
 - [ ] Unit tests: commission math, payout balance math, webhook dedup, HMAC verify — the money paths
 - [ ] Integration test: pay → webhook → session → RADIUS accept
@@ -78,7 +103,10 @@
 
 ### P2 — product completeness
 - [ ] Agent dashboard UI (backend shipped 2026-07-18, zero UI)
-- [ ] Password reset + email verification
+- [ ] Password reset + email verification (email infra lands in P1)
+- [ ] KYC document upload + admin review UI (for pilot, Daniel knows applicants personally — doc upload can wait)
+- [ ] Onboarding checklist in dashboard (create plan → connect router → test → go live)
+- [ ] SMS/receipt to WiFi buyer on successful payment
 - [ ] SMS notifications (Africa's Talking): session start / expiry warning / top-up
 - [ ] ZengaPay disbursement API on payout approval (replaces manual mark-paid)
 - [ ] Refund handling
@@ -97,7 +125,7 @@
 
 ---
 
-## 4. Verified End-to-End (evidence log)
+## 5. Verified End-to-End (evidence log)
 
 | Test | Result | Date |
 |---|---|---|
@@ -114,7 +142,7 @@
 
 ---
 
-## 5. Completed Work (reference)
+## 6. Completed Work (reference)
 
 <details><summary><b>M0 — Planning & architecture</b></summary>
 
@@ -148,7 +176,7 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 
 ---
 
-## 6. Server Reference — 170.64.177.20
+## 7. Server Reference — 170.64.177.20
 
 | Layer | Detail |
 |---|---|
@@ -163,7 +191,12 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 
 ---
 
-## 7. Session Log (newest first)
+## 8. Session Log (newest first)
+
+### 2026-07-18 (evening) — Customer-journey gap walkthrough
+- Walked the product end-to-end as a fresh self-serve customer (landing → signup → KYC → setup → router → sale → payout); added §3 journey gap table
+- Biggest finds: **no landing page anywhere in the plan** (root 302s to demo portal); **router onboarding requires SSH to the server** (`devices` table unused); KYC promises a notification the system cannot send (no email/SMS infra exists); no ToS/privacy/fee disclosure
+- Backlog: P0 + landing/signup UI (#6), router self-onboarding wizard (#7), founder dry-run gate for M8 (#8); P1 + email infra, legal pages; NAS lockdown folded into wizard; new milestone M5.5
 
 ### 2026-07-18 (later) — Verification audit; domain purchased
 - `myfipay.com` purchased on Cloudflare (NS live: lady/dane.ns.cloudflare.com); **no A records yet** — M5 unblocked
