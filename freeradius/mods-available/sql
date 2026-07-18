@@ -1,0 +1,33 @@
+sql {
+    driver = "rlm_sql_postgresql"
+    dialect = "postgresql"
+
+    server   = "postgres"
+    port     = 5432
+    login    = "myfibase"
+    password = "mFB_db_2026!Soroti"
+    radius_db = "myfibase"
+
+    # Standard FreeRADIUS tables (populated by myFiBase on session creation)
+    authcheck_table  = "radcheck"
+    authreply_table  = "radreply"
+    groupcheck_table = "radgroupcheck"
+    groupreply_table = "radgroupreply"
+    usergroup_table  = "radusergroup"
+    acct_table1      = "radacct"
+    acct_table2      = "radacct"
+    postauth_table   = "radpostauth"
+
+    read_groups   = yes
+    read_profiles = yes
+
+    pool {
+        start       = 5
+        min         = 3
+        max         = 10
+        spare       = 3
+        uses        = 0
+        lifetime    = 0
+        idle_timeout = 60
+    }
+}

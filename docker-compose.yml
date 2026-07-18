@@ -1,16 +1,15 @@
 services:
+
   postgres:
     image: postgres:16-alpine
     container_name: myfibase_postgres
     restart: unless-stopped
-    env_file: .env
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./api/db/migrations:/docker-entrypoint-initdb.d:ro
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
@@ -34,6 +33,27 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: myfibase_api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # nginx and freeradius are installed natively (apt) on the host
+  # to avoid Docker image availability issues and simplify port binding
+
   adminer:
     image: adminer:latest
     container_name: myfibase_adminer
@@ -41,8 +61,7 @@ services:
     ports:
       - "127.0.0.1:8081:8080"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - postgres
 
 volumes:
   postgres_data:

@@ -1,0 +1,45 @@
+server hotspot {
+
+    listen {
+        type      = auth
+        ipaddr    = *
+        port      = 1812
+    }
+
+    listen {
+        type      = acct
+        ipaddr    = *
+        port      = 1813
+    }
+
+    authorize {
+        preprocess
+        sql
+        pap
+    }
+
+    authenticate {
+        Auth-Type PAP {
+            pap
+        }
+        Auth-Type Accept {
+            ok
+        }
+    }
+
+    preacct {
+        preprocess
+        acct_unique
+    }
+
+    accounting {
+        sql
+    }
+
+    post-auth {
+        sql
+        Post-Auth-Type REJECT {
+            attr_filter.access_reject
+        }
+    }
+}

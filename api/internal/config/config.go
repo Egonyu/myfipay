@@ -3,27 +3,38 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	AppEnv  string
-	Port    string
+	AppEnv    string
+	Port      string
 	AppSecret string
 
-	DatabaseURL string
-	RedisURL    string
+	DatabaseURL   string
+	RedisURL      string
 	RedisPassword string
 
-	ZengapayAPIURL       string
-	ZengapayAPIToken     string
+	JWTSecret string
+	JWTExpiryHours int
+
+	ZengapayAPIURL        string
+	ZengapayAPIToken      string
 	ZengapayWebhookSecret string
 }
 
 func Load() *Config {
 	if err := godotenv.Load("/var/www/myfibase/.env"); err != nil {
 		log.Println("no .env file, using environment variables")
+	}
+
+	jwtExpiry := 24
+	if v := getEnv("JWT_EXPIRY_HOURS", ""); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			jwtExpiry = n
+		}
 	}
 
 	return &Config{
@@ -34,6 +45,9 @@ func Load() *Config {
 		DatabaseURL:   buildDSN(),
 		RedisURL:      getEnv("REDIS_URL", "redis://localhost:6379"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+
+		JWTSecret:      getEnv("JWT_SECRET", mustEnv("APP_SECRET")),
+		JWTExpiryHours: jwtExpiry,
 
 		ZengapayAPIURL:        getEnv("ZENGAPAY_API_URL", "https://api.zengapay.com"),
 		ZengapayAPIToken:      getEnv("ZENGAPAY_API_TOKEN", ""),

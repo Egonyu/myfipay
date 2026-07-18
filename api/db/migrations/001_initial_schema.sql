@@ -117,6 +117,7 @@ CREATE TABLE sessions (
     payment_id       UUID REFERENCES payments(id),
     username         VARCHAR(255) NOT NULL,
     customer_phone   VARCHAR(20),
+    mac_address      VARCHAR(17),
     ip_address       INET,
     nas_ip           INET,
     nas_id           VARCHAR(255),

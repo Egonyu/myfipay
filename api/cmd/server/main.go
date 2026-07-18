@@ -31,7 +31,11 @@ func main() {
 	}
 	defer cache.Close()
 
-	srv := server.New(cfg, pool, cache)
+	// ctx tied to process lifetime — cancelled on SIGINT/SIGTERM
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+
+	srv := server.New(ctx, cfg, pool, cache)
 
 	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),
@@ -53,7 +57,8 @@ func main() {
 	<-quit
 
 	log.Println("shutting down...")
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	httpServer.Shutdown(ctx)
+	cancelCtx() // stop background goroutines
+	shutCtx, shutCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer shutCancel()
+	httpServer.Shutdown(shutCtx)
 }
