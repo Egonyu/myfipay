@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — myFiPay</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="/">my<span class="fi">FiPay</span></a>
+    <nav class="nav"><a href="/signup">Get started</a></nav>
+  </div>
+</header>
+
+<div class="form-page">
+  <div class="form-card">
+    <h1>Sign in</h1>
+    <p class="lead">Welcome back.</p>
+
+    <div class="alert alert-error" id="error-box"></div>
+    <div class="alert alert-ok" id="info-box"></div>
+
+    <form id="login-form" novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <button class="btn btn-primary btn-block" id="submit-btn" type="submit">Sign in</button>
+    </form>
+
+    <p class="form-alt">New to myFiPay? <a href="/signup">Create an account</a></p>
+  </div>
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById('login-form');
+  var errorBox = document.getElementById('error-box');
+  var infoBox = document.getElementById('info-box');
+  var submitBtn = document.getElementById('submit-btn');
+
+  function show(box, msg) {
+    box.textContent = msg;
+    box.classList.add('show');
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    errorBox.classList.remove('show');
+    infoBox.classList.remove('show');
+
+    var body = {
+      email: document.getElementById('email').value.trim(),
+      password: document.getElementById('password').value
+    };
+    if (!body.email || !body.password) return show(errorBox, 'Please enter your email and password.');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing in…';
+
+    fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+    }).then(function (r) {
+      if (r.ok) {
+        location.href = '/account';
+        return;
+      }
+      var err = r.data && r.data.error;
+      if (err && err.code === 'PENDING_KYC') {
+        show(infoBox, 'Your account is still pending review — this usually takes less than a working day. Please try again later.');
+      } else {
+        show(errorBox, (err && err.message) || 'Sign-in failed. Please try again.');
+      }
+    }).catch(function () {
+      show(errorBox, 'Could not reach the server. Check your connection and try again.');
+    }).finally(function () {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign in';
+    });
+  });
+})();
+</script>
+
+</body>
+</html>

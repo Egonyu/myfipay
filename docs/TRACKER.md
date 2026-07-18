@@ -18,8 +18,8 @@
 | M3 Operator dashboard MVP | ⚠️ **code missing** | Built in preview sandbox 2026-06-25; `dashboard/` on server is **empty** — must be recovered or rebuilt |
 | M4 Vouchers + cash sessions | ✅ | Batches, redemption, PDF/QR, cash grant — all in API |
 | M4.5 Agent network (API) | ✅ 2026-07-18 | Full API + DB live; UI pending |
-| M5 SSL + domain + Nairobi prod | ⏳ **unblocked** | `myfipay.com` purchased (Cloudflare, 2026-07-18); NS active, **no A records yet** — next: A record → 170.64.177.20, nginx server_name, SSL |
-| M5.5 Public site + self-serve onboarding | ❌ | Landing page, signup/onboarding UI, KYC UX, router setup wizard — see §3 journey walkthrough (2026-07-18) |
+| M5 SSL + domain (dev server) | ✅ 2026-07-18 | `https://myfipay.com` live: Cloudflare-proxied A records, certbot SSL, nginx serving `site/` + proxying `/api/`; HTTP→HTTPS redirect on domain; raw-IP HTTP kept for NAS portal + webhooks. Nairobi prod droplet still P3 |
+| M5.5 Public site + self-serve onboarding | ⚠️ partial | **Live 2026-07-18:** landing, signup (operator+agent), login (KYC-aware), account stub — verified e2e over HTTPS. **Missing:** real dashboard (M3), router wizard, KYC notifications, ToS/privacy, password reset |
 | M6 Mobile app (Expo) | ❌ | Not started |
 | M7 Edge agent (Pi/CHR) | ❌ | Not started |
 | M8 Pilot launch — Soroti | ❌ | Blocked on: M3 recovery, MikroTik live test, ZengaPay prod, **founder dry-run (§3)** |
@@ -42,8 +42,8 @@
 - [x] Daily 2am backups (pg_dump + code, 7-day retention) via cron
 
 ### Required before real money (P0/P1 below) ❌
-- [ ] **UFW is INACTIVE** (found 2026-07-18 audit — tracker previously claimed active). RADIUS UDP 1812/1813 is bound 0.0.0.0 **and** `clients.conf` has a `0.0.0.0/0` client with the pre-scrub secret → anyone on the internet can talk to RADIUS. Re-enable UFW (allow 22, 80, 443; RADIUS only from known NAS IPs)
-- [ ] **HTTPS everywhere** — portal sends phone numbers, dashboard sends passwords over HTTP (domain now available — unblocked)
+- [x] **UFW active** (verified 2026-07-18: allow 22/80/443 only, v4+v6) — public RADIUS exposure closed at the firewall. `clients.conf` lockdown + secret rotation still open below
+- [x] **HTTPS on the domain** — `https://myfipay.com` live (certbot), domain HTTP 301s to HTTPS; auth cookie now `Secure` (deployed + verified 2026-07-18). ⚠️ Captive portal via raw IP is still HTTP until NAS/walled-garden and ZengaPay callback move to the domain
 - [ ] ZengaPay webhook IP allowlist (fires from known IPs; one middleware)
 - [ ] `clients.conf` locked to registered NAS IPs + per-device secrets (`devices` table exists, unused)
 - [ ] Rotate super-admin password (current one was documented in this repo pre-scrub) + rotate RADIUS secret (same reason)
@@ -83,8 +83,8 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | 2 | Recover or rebuild operator dashboard | Daniel decides | `dashboard/` empty on server; if sandbox code is lost, rebuild from the 16-item feature list (§5 M3) |
 | 3 | MikroTik live test | Daniel + Claude | Real router → RADIUS; everything so far is `radtest` only |
 | 4 | ZengaPay production account | Daniel | Then: live token + HMAC secret in `.env` |
-| 5 | Domain + SSL | Daniel + Claude | `myfipay.com` bought (Cloudflare); next: A record → 170.64.177.20, then nginx + SSL (Cloudflare proxy or certbot) |
-| 6 | Landing page + signup/login UI at `myfipay.com` root | Claude | Root currently 302s to demo portal; front door of the funnel (§3 stages 1–2) |
+| 5 | ~~Domain + SSL~~ ✅ | Done | `https://myfipay.com` live 2026-07-18 (Cloudflare proxy + certbot + UFW) |
+| 6 | ~~Landing page + signup/login UI~~ ✅ | Done | `site/` live 2026-07-18; signup→KYC gate→login→stats verified e2e over HTTPS. Account page is a stub until dashboard (#2) lands |
 | 7 | Router self-onboarding wizard | Claude | Register device in dashboard → per-device RADIUS secret → generated MikroTik setup script → connection test. Uses the dormant `devices` table; also closes the P1 `clients.conf` lockdown security item (§3 stage 5) |
 | 8 | Founder dry-run | Daniel | Sign up → first paid session with zero server access. Gates M8 (§3 litmus test) |
 
@@ -139,6 +139,9 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | Agent JWT hitting admin route → 403 | ✅ | 2026-07-18 |
 | Migrations 001–004 applied, schema matches code (mac_address drift resolved) | ✅ | 2026-07-18 |
 | API rebuilt + redeployed, `/health` OK | ✅ | 2026-07-18 |
+| `https://myfipay.com` — landing/signup/login/assets all 200 via Cloudflare | ✅ | 2026-07-18 |
+| Live e2e: signup → login blocked `PENDING_KYC` → DB approve → login sets `Secure` cookie → `/api/auth/me` + `/api/dashboard/stats` OK | ✅ | 2026-07-18 |
+| UFW active (22/80/443 only); raw-IP HTTP portal still serves for NAS | ✅ | 2026-07-18 |
 
 ---
 
@@ -192,6 +195,14 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-18 (night) — Site + SSL live; session continuity catch-up
+- Found substantial work from the previous session that was live but uncommitted and untracked: `site/` (landing, signup, login, account stub), certbot SSL nginx config for `myfipay.com`, UFW enabled, `Secure` cookie flag in `auth.go`
+- Verified live: Cloudflare-proxied A records resolve, `https://myfipay.com` serves the site (200 on /, /signup, /assets/style.css); UFW active with 22/80/443 only; raw-IP HTTP portal (`/portal/demo/`) still 200 for the NAS walled-garden path
+- Deployed the `Secure` cookie change (API container was still running the old build) and verified full flow live: signup → `PENDING_KYC` login block → DB approve → login (cookie now `HttpOnly; Secure; SameSite=Lax`) → `/api/auth/me` → `/api/dashboard/stats`
+- Cleaned 3 test tenants out of the DB (`conn-test`, `tracker-test-wifi`, `-2`); back to the 2 demo tenants
+- Synced repo `nginx/conf.d/myfibase.conf` with the live certbot config; committed site + auth + nginx + tracker
+- Tracker updated: M5 ✅, M5.5 partial, UFW + HTTPS security items closed, P0 #5/#6 done
 
 ### 2026-07-18 (evening) — Customer-journey gap walkthrough
 - Walked the product end-to-end as a fresh self-serve customer (landing → signup → KYC → setup → router → sale → payout); added §3 journey gap table

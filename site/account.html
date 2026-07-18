@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your account — myFiPay</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="/">my<span class="fi">FiPay</span></a>
+    <nav class="nav"><a href="#" id="logout-link">Sign out</a></nav>
+  </div>
+</header>
+
+<div class="form-page" style="max-width:640px">
+  <div class="form-card" id="account-card" style="display:none">
+    <h1 id="greeting">Your account</h1>
+    <p class="lead" id="account-meta"></p>
+
+    <div id="stats-section" style="display:none">
+      <div class="stat-grid">
+        <div class="stat"><div class="label">Online now</div><div class="value" id="stat-active">–</div></div>
+        <div class="stat"><div class="label">Sessions today</div><div class="value" id="stat-sessions">–</div></div>
+        <div class="stat"><div class="label">Revenue today</div><div class="value" id="stat-revenue">–</div></div>
+        <div class="stat"><div class="label">Locations</div><div class="value" id="stat-locations">–</div></div>
+      </div>
+    </div>
+
+    <div class="alert alert-ok show" style="margin-top:24px">
+      <strong>The full dashboard is on its way.</strong> Plans, locations, sessions, vouchers, and payouts are already live in the platform — the web dashboard to manage them lands here shortly. Your account and earnings are safe in the meantime.
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  function api(path) {
+    return fetch(path, { credentials: 'same-origin' }).then(function (res) {
+      if (res.status === 401) { location.href = '/login'; throw new Error('unauthenticated'); }
+      return res.json();
+    });
+  }
+
+  api('/api/auth/me').then(function (r) {
+    var u = r.data || {};
+    document.getElementById('greeting').textContent = 'Hello, ' + (u.name || u.email || 'there');
+    var role = u.role === 'agent' ? 'Agent account' : (u.role === 'operator' ? 'Operator account' : (u.role || '') + ' account');
+    document.getElementById('account-meta').textContent = role + ' · ' + (u.email || '');
+    document.getElementById('account-card').style.display = '';
+
+    if (u.role === 'operator') {
+      api('/api/dashboard/stats').then(function (s) {
+        var d = s.data || {};
+        document.getElementById('stat-active').textContent = d.active_sessions;
+        document.getElementById('stat-sessions').textContent = d.today_sessions;
+        document.getElementById('stat-revenue').textContent = Math.round(d.today_revenue).toLocaleString() + ' UGX';
+        document.getElementById('stat-locations').textContent = d.total_locations;
+        document.getElementById('stats-section').style.display = '';
+      }).catch(function () {});
+    }
+  }).catch(function () {});
+
+  document.getElementById('logout-link').addEventListener('click', function (e) {
+    e.preventDefault();
+    fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' })
+      .finally(function () { location.href = '/'; });
+  });
+})();
+</script>
+
+</body>
+</html>

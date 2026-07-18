@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Create your account — myFiPay</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="/">my<span class="fi">FiPay</span></a>
+    <nav class="nav"><a href="/login">Sign in</a></nav>
+  </div>
+</header>
+
+<div class="form-page">
+  <div class="form-card">
+    <h1>Create your account</h1>
+    <p class="lead" id="lead-text">Set up your hotspot business on myFiPay.</p>
+
+    <div class="role-toggle" role="tablist">
+      <button type="button" id="tab-operator" class="active">Hotspot operator</button>
+      <button type="button" id="tab-agent">Agent</button>
+    </div>
+
+    <div class="alert alert-error" id="error-box"></div>
+
+    <form id="signup-form" novalidate>
+      <div class="field">
+        <label for="name">Your full name</label>
+        <input id="name" name="name" autocomplete="name" required>
+      </div>
+      <div class="field" id="field-business">
+        <label for="business_name">Business / hotspot name</label>
+        <input id="business_name" name="business_name" placeholder="e.g. Sarah's WiFi, Soroti Market">
+        <p class="hint">This is the name your customers will see on the payment portal.</p>
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required>
+      </div>
+      <div class="field">
+        <label for="phone">Phone (mobile money number)</label>
+        <input id="phone" name="phone" type="tel" placeholder="0772 123 456" autocomplete="tel" required>
+      </div>
+      <div class="field">
+        <label for="district">District</label>
+        <input id="district" name="district" placeholder="e.g. Soroti">
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required>
+        <p class="hint">At least 8 characters.</p>
+      </div>
+      <div class="field" id="field-agent-code">
+        <label for="agent_code">Agent invite code <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input id="agent_code" name="agent_code" placeholder="Leave empty if you don't have one">
+      </div>
+      <button class="btn btn-primary btn-block" id="submit-btn" type="submit">Create account</button>
+    </form>
+
+    <div id="success-panel" style="display:none">
+      <div class="alert alert-ok show">
+        <strong>Application received.</strong>
+      </div>
+      <p style="font-size:0.95rem;color:var(--muted)">Your account is now <strong>pending review</strong> — a quick check we run on every new account before real money starts flowing. This usually takes less than a working day.</p>
+      <p style="font-size:0.95rem;color:var(--muted);margin-top:10px">Once approved you can sign in, set up your plans, and connect your router. Try <a href="/login">signing in</a> later — if the review is still in progress, the sign-in page will tell you.</p>
+    </div>
+
+    <p class="form-alt" id="alt-link">Already have an account? <a href="/login">Sign in</a></p>
+  </div>
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById('signup-form');
+  var errorBox = document.getElementById('error-box');
+  var submitBtn = document.getElementById('submit-btn');
+  var tabOperator = document.getElementById('tab-operator');
+  var tabAgent = document.getElementById('tab-agent');
+  var mode = 'operator';
+
+  function setMode(m) {
+    mode = m;
+    var isOp = m === 'operator';
+    tabOperator.classList.toggle('active', isOp);
+    tabAgent.classList.toggle('active', !isOp);
+    document.getElementById('field-business').style.display = isOp ? '' : 'none';
+    document.getElementById('field-agent-code').style.display = isOp ? '' : 'none';
+    document.getElementById('lead-text').textContent = isOp
+      ? 'Set up your hotspot business on myFiPay.'
+      : 'Earn 3% of every payment collected by operators you bring on board.';
+  }
+  tabOperator.addEventListener('click', function () { setMode('operator'); });
+  tabAgent.addEventListener('click', function () { setMode('agent'); });
+
+  var params = new URLSearchParams(location.search);
+  if (params.get('type') === 'agent') setMode('agent');
+  if (params.get('agent')) document.getElementById('agent_code').value = params.get('agent');
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.classList.add('show');
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    errorBox.classList.remove('show');
+
+    var body = {
+      name: document.getElementById('name').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      phone: document.getElementById('phone').value.trim(),
+      district: document.getElementById('district').value.trim(),
+      password: document.getElementById('password').value
+    };
+    var url = '/api/auth/register/agent';
+    if (mode === 'operator') {
+      url = '/api/auth/register';
+      body.business_name = document.getElementById('business_name').value.trim();
+      body.agent_code = document.getElementById('agent_code').value.trim();
+      if (!body.business_name) return showError('Please enter your business or hotspot name.');
+    }
+    if (!body.name || !body.email || !body.password) return showError('Please fill in your name, email, and password.');
+    if (body.password.length < 8) return showError('Password must be at least 8 characters.');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating account…';
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function (res) {
+      return res.json().then(function (data) { return { ok: res.ok, data: data }; });
+    }).then(function (r) {
+      if (r.ok) {
+        form.style.display = 'none';
+        document.getElementById('alt-link').style.display = 'none';
+        document.querySelector('.role-toggle').style.display = 'none';
+        document.getElementById('success-panel').style.display = '';
+      } else {
+        var err = r.data && r.data.error;
+        showError((err && err.message) || 'Something went wrong. Please try again.');
+      }
+    }).catch(function () {
+      showError('Could not reach the server. Check your connection and try again.');
+    }).finally(function () {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create account';
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
