@@ -19,7 +19,7 @@ type kycOperator struct {
 	UserName     string  `json:"name"`
 	Email        string  `json:"email"`
 	Phone        string  `json:"phone"`
-	AppliedAt    string  `json:"applied_at"`
+	AppliedAt    time.Time `json:"applied_at"`
 	RejectionReason string `json:"rejection_reason,omitempty"`
 }
 
@@ -223,7 +223,7 @@ func (h *Handler) PlatformRevenue(w http.ResponseWriter, r *http.Request) {
 
 	// 30-day chart
 	cRows, err := h.db.Query(ctx, `
-		SELECT DATE(s.started_at) AS day, COALESCE(SUM(p.price_ugx), 0) AS revenue
+		SELECT DATE(s.started_at)::text AS day, COALESCE(SUM(p.price_ugx), 0) AS revenue
 		FROM sessions s JOIN plans p ON s.plan_id = p.id
 		WHERE s.started_at >= NOW() - INTERVAL '30 days'
 		GROUP BY day ORDER BY day

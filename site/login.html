@@ -74,7 +74,7 @@
       return res.json().then(function (data) { return { ok: res.ok, data: data }; });
     }).then(function (r) {
       if (r.ok) {
-        location.href = '/account';
+        location.href = '/dashboard/';
         return;
       }
       var err = r.data && r.data.error;

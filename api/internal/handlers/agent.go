@@ -169,7 +169,7 @@ func (h *Handler) AgentInviteLink(w http.ResponseWriter, r *http.Request) {
 
 	respond(w, http.StatusOK, map[string]string{
 		"invite_code": slug,
-		"invite_url":  "https://myfibase.ug/register?agent=" + slug,
+		"invite_url":  "https://myfipay.com/signup?agent=" + slug,
 	})
 }
 

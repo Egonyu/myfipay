@@ -15,7 +15,7 @@
 | M0 Decisions + architecture | ✅ | `docs/` complete |
 | M1 Core API + portal + RADIUS | ✅ | Verified end-to-end 2026-06-25 |
 | M2 ZengaPay payment cycle | ✅ sandbox | Prod account blocked (shared with TesoTunes) |
-| M3 Operator dashboard MVP | ⚠️ **code missing** | Built in preview sandbox 2026-06-25; `dashboard/` on server is **empty** — must be recovered or rebuilt |
+| M3 Operator dashboard MVP | ✅ 2026-07-18 | **Rebuilt** as static SPA at `site/dashboard/` (vanilla JS + cookie JWT, no Node needed on server) — live at `myfipay.com/dashboard/`, all views smoke-tested against the live API. Sandbox Next.js code abandoned; root `dashboard/` dir unused |
 | M4 Vouchers + cash sessions | ✅ | Batches, redemption, PDF/QR, cash grant — all in API |
 | M4.5 Agent network (API) | ✅ 2026-07-18 | Full API + DB live; UI pending |
 | M5 SSL + domain (dev server) | ✅ 2026-07-18 | `https://myfipay.com` live: Cloudflare-proxied A records, certbot SSL, nginx serving `site/` + proxying `/api/`; HTTP→HTTPS redirect on domain; raw-IP HTTP kept for NAS portal + webhooks. Nairobi prod droplet still P3 |
@@ -80,7 +80,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | # | Task | Owner | Notes |
 |---|---|---|---|
 | 1 | ~~Push repo to GitHub~~ ✅ | Done | Verified 2026-07-18: `origin/main` matches local HEAD (`89df9e6`); git history confirmed clean of RADIUS secret |
-| 2 | Recover or rebuild operator dashboard | Daniel decides | `dashboard/` empty on server; if sandbox code is lost, rebuild from the 16-item feature list (§5 M3) |
+| 2 | ~~Recover or rebuild operator dashboard~~ ✅ | Done | Rebuilt 2026-07-18 as static app at `/dashboard/`: operator (overview+chart, sessions grant/extend/terminate, plans CRUD, locations+branding, payments, vouchers+print, payouts, settings), agent (invite/operators/commissions/payouts), admin (KYC queue, tenants, revenue, both payout queues, agents) |
 | 3 | MikroTik live test | Daniel + Claude | Real router → RADIUS; everything so far is `radtest` only |
 | 4 | ZengaPay production account | Daniel | Then: live token + HMAC secret in `.env` |
 | 5 | ~~Domain + SSL~~ ✅ | Done | `https://myfipay.com` live 2026-07-18 (Cloudflare proxy + certbot + UFW) |
@@ -142,6 +142,10 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | `https://myfipay.com` — landing/signup/login/assets all 200 via Cloudflare | ✅ | 2026-07-18 |
 | Live e2e: signup → login blocked `PENDING_KYC` → DB approve → login sets `Secure` cookie → `/api/auth/me` + `/api/dashboard/stats` OK | ✅ | 2026-07-18 |
 | UFW active (22/80/443 only); raw-IP HTTP portal still serves for NAS | ✅ | 2026-07-18 |
+| Dashboard live e2e (operator): create location → plan → grant session → extend → terminate → voucher batch → branding → payments/balance/stats | ✅ | 2026-07-18 |
+| Dashboard live e2e (admin): KYC queue lists pending signup → approve via API → operator login succeeds | ✅ | 2026-07-18 |
+| Dashboard live e2e (agent): register → all 5 agent endpoints return; invite URL now myfipay.com/signup?agent= | ✅ | 2026-07-18 |
+| Bug fix verified: revenue-chart `day` was empty (DATE→string scan swallowed); now returns ISO dates | ✅ | 2026-07-18 |
 
 ---
 
@@ -195,6 +199,14 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-18 (late night) — Operator dashboard rebuilt and live
+- M3 rebuilt from scratch as a static SPA (`site/dashboard/` + `assets/dashboard.js/.css`) instead of the lost sandbox Next.js app — no Node runtime needed on the 1GB droplet, served by existing nginx `site/` root, cookie-JWT auth against the existing API
+- Role-aware views — operator: overview + 30-day SVG revenue chart, sessions (filter/grant/extend/terminate), plans CRUD, locations + branding, payments, vouchers (create/view/print sheet), payouts (balance + request + history), settings (profile/password). Agent: overview, invite link + copy, operators, commissions, payouts. Admin: KYC queue (approve/reject), tenants, platform revenue, operator payout queue (approve/reject/mark-paid), agents + agent payout queue
+- Login now redirects to `/dashboard/`; `/account` 301-style redirects there (stub retired)
+- **3 API bugs found by smoke testing and fixed:** (1) KYC queue always returned empty — `AppliedAt string` scanning a timestamptz made every `rows.Scan` fail silently; (2) same DATE→string scan bug zeroed `revenue-chart` days (operator + admin); (3) stale hardcoded URLs — agent invite pointed at dead `myfibase.ug`, CreateLocation returned raw-IP portal URL
+- Everything smoke-tested live over HTTPS as all three roles (see evidence log); temp admin user created via pgcrypto bcrypt and removed after; all test tenants/users/sessions/RADIUS rows cleaned — DB back to 2 demo tenants + super_admin
+- Remaining for founder dry-run: router self-onboarding wizard (P0 #7), MikroTik live test, ZengaPay prod
 
 ### 2026-07-18 (night) — Site + SSL live; session continuity catch-up
 - Found substantial work from the previous session that was live but uncommitted and untracked: `site/` (landing, signup, login, account stub), certbot SSL nginx config for `myfipay.com`, UFW enabled, `Secure` cookie flag in `auth.go`

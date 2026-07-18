@@ -79,7 +79,7 @@ func (h *Handler) RevenueChart(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
 	rows, err := h.db.Query(ctx,
-		`SELECT DATE(s.started_at) AS day, COALESCE(SUM(p.price_ugx), 0) AS revenue
+		`SELECT DATE(s.started_at)::text AS day, COALESCE(SUM(p.price_ugx), 0) AS revenue
 		 FROM sessions s
 		 JOIN plans p ON s.plan_id = p.id
 		 WHERE s.started_at >= NOW() - INTERVAL '30 days'
@@ -493,7 +493,7 @@ func (h *Handler) CreateLocation(w http.ResponseWriter, r *http.Request) {
 	}
 	respond(w, http.StatusCreated, map[string]string{
 		"id":         id,
-		"portal_url": "http://170.64.177.20/portal/" + req.Slug + "/",
+		"portal_url": "https://myfipay.com/portal/" + req.Slug + "/",
 	})
 }
 
