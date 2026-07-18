@@ -2,32 +2,35 @@ sql {
     driver = "rlm_sql_postgresql"
     dialect = "postgresql"
 
-    server   = "postgres"
-    port     = 5432
-    login    = "myfibase"
-    password = "mFB_db_2026!Soroti"
+    server = "127.0.0.1"
+    port = 5432
+    login = "myfibase"
+    password = "CHANGE_ME_SET_IN_ETC_FREERADIUS"
     radius_db = "myfibase"
 
-    # Standard FreeRADIUS tables (populated by myFiBase on session creation)
-    authcheck_table  = "radcheck"
-    authreply_table  = "radreply"
+    acct_table1 = "radacct"
+    acct_table2 = "radacct"
+    postauth_table = "radpostauth"
+    authcheck_table = "radcheck"
     groupcheck_table = "radgroupcheck"
+    authreply_table = "radreply"
     groupreply_table = "radgroupreply"
-    usergroup_table  = "radusergroup"
-    acct_table1      = "radacct"
-    acct_table2      = "radacct"
-    postauth_table   = "radpostauth"
-
-    read_groups   = yes
-    read_profiles = yes
-
+    usergroup_table = "radusergroup"
+    delete_stale_sessions = yes
     pool {
-        start       = 5
-        min         = 3
-        max         = 10
-        spare       = 3
-        uses        = 0
-        lifetime    = 0
+        start = 5
+        min = 4
+        max = 10
+        spare = 3
+        uses = 0
+        lifetime = 0
         idle_timeout = 60
     }
+    # Load NAS clients from the "nas" table (written by the dashboard's router
+    # onboarding). Requires a FreeRADIUS restart to pick up changes —
+    # scripts/radius-sync.sh (cron, every minute) handles that + UFW rules.
+    read_clients = yes
+    client_table = "nas"
+    group_attribute = "SQL-Group"
+    $INCLUDE ${modconfdir}/${.:name}/main/${dialect}/queries.conf
 }

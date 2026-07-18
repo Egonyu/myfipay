@@ -77,6 +77,14 @@ func New(ctx context.Context, cfg *config.Config, db *pgxpool.Pool, cache *redis
 		r.Get("/api/locations/{id}/branding", h.GetLocationBranding)
 		r.Put("/api/locations/{id}/branding", h.UpdateLocationBranding)
 
+		// Devices (routers)
+		r.Get("/api/devices", h.ListDevices)
+		r.Post("/api/devices", h.CreateDevice)
+		r.Put("/api/devices/{id}", h.UpdateDevice)
+		r.Delete("/api/devices/{id}", h.DeleteDevice)
+		r.Get("/api/devices/{id}/script", h.DeviceScript)
+		r.Get("/api/devices/{id}/status", h.DeviceStatus)
+
 		// Plans
 		r.Get("/api/plans", h.ListOperatorPlans)
 		r.Post("/api/plans", h.CreatePlan)

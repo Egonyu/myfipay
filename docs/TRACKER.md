@@ -19,10 +19,10 @@
 | M4 Vouchers + cash sessions | ✅ | Batches, redemption, PDF/QR, cash grant — all in API |
 | M4.5 Agent network (API) | ✅ 2026-07-18 | Full API + DB live; UI pending |
 | M5 SSL + domain (dev server) | ✅ 2026-07-18 | `https://myfipay.com` live: Cloudflare-proxied A records, certbot SSL, nginx serving `site/` + proxying `/api/`; HTTP→HTTPS redirect on domain; raw-IP HTTP kept for NAS portal + webhooks. Nairobi prod droplet still P3 |
-| M5.5 Public site + self-serve onboarding | ⚠️ partial | **Live 2026-07-18:** landing, signup (operator+agent), login (KYC-aware), account stub — verified e2e over HTTPS. **Missing:** real dashboard (M3), router wizard, KYC notifications, ToS/privacy, password reset |
+| M5.5 Public site + self-serve onboarding | ⚠️ partial | **Live 2026-07-18:** landing, signup (operator+agent), login (KYC-aware), dashboard (M3), router self-onboarding wizard — verified e2e over HTTPS. **Missing:** KYC notifications, ToS/privacy, password reset |
 | M6 Mobile app (Expo) | ❌ | Not started |
 | M7 Edge agent (Pi/CHR) | ❌ | Not started |
-| M8 Pilot launch — Soroti | ❌ | Blocked on: M3 recovery, MikroTik live test, ZengaPay prod, **founder dry-run (§3)** |
+| M8 Pilot launch — Soroti | ❌ | Blocked on: MikroTik live test, ZengaPay prod, **founder dry-run (§3)** |
 
 ---
 
@@ -45,8 +45,8 @@
 - [x] **UFW active** (verified 2026-07-18: allow 22/80/443 only, v4+v6) — public RADIUS exposure closed at the firewall. `clients.conf` lockdown + secret rotation still open below
 - [x] **HTTPS on the domain** — `https://myfipay.com` live (certbot), domain HTTP 301s to HTTPS; auth cookie now `Secure` (deployed + verified 2026-07-18). ⚠️ Captive portal via raw IP is still HTTP until NAS/walled-garden and ZengaPay callback move to the domain
 - [ ] ZengaPay webhook IP allowlist (fires from known IPs; one middleware)
-- [ ] `clients.conf` locked to registered NAS IPs + per-device secrets (`devices` table exists, unused)
-- [ ] Rotate super-admin password (current one was documented in this repo pre-scrub) + rotate RADIUS secret (same reason)
+- [x] **`clients.conf` locked down** (verified 2026-07-18): the `0.0.0.0/0` shared-secret client is gone; NAS clients now come from the `nas` table (per-device random secrets, written by the router wizard), UFW opens 1812-1813 only per registered router IP (`radius-sync.sh` cron). Only a localhost test client remains in `clients.conf`. This also closes the RADIUS-secret exposure: the shared secret no longer authenticates any external client
+- [x] Rotate super-admin password ✅ 2026-07-18 · RADIUS shared-secret exposure closed via `clients.conf` lockdown above (shared client removed entirely; per-device secrets now)
 - [ ] Offsite backups — current backups live on the same disk they protect (DO Spaces, ~5 lines in backup.sh)
 - [ ] Fail2ban (SSH is on a public IP) + logrotate (25GB disk)
 - [ ] CORS allowlist — currently echoes any Origin with credentials=true; must pin to dashboard origin(s) in prod
@@ -65,7 +65,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | 2. Sign up | `POST /api/auth/register` verified working | No web page to call it (dashboard empty); no email verification; no ToS/privacy to accept; no password reset |
 | 3. KYC review | Account lands `pending_kyc`, login blocked; admin approve/reject API | Black hole: nothing to upload, nothing for admin to review against, and the promised "you will be notified" has **no notification mechanism** (zero email/SMS infra in the system) |
 | 4. First login / setup | Location, plan, branding, voucher APIs all live | No onboarding UI or checklist ("create plan → connect router → test") |
-| 5. Connect router (**activation**) | `devices` table exists, **unused**; `clients.conf` hand-edited on server | **Biggest gap**: no device self-registration, no per-device RADIUS secret, no generated MikroTik config script, no walled-garden instructions, no connection test. Today this step requires Daniel SSH-ing into the server — consultancy, not SaaS |
+| 5. Connect router (**activation**) | ✅ **Closed 2026-07-18** — Routers view in dashboard: register device → per-device RADIUS secret → generated MikroTik script + login.html download → connection test. `radius-sync.sh` cron syncs UFW + FreeRADIUS from the `nas` table every minute | Remaining: verify on a real MikroTik (P0 #3) |
 | 6. First sale | Pay → webhook → WiFi grant verified end-to-end (sandbox) | ZengaPay prod blocked; no receipt to the WiFi buyer |
 | 7. Get paid | Payout request + admin queue APIs | No UI; disbursement is manual mark-paid; 8% platform fee disclosed nowhere except source code — no statement/fee breakdown for the operator |
 | 8. Ongoing trust | — | No support channel or help docs; no notifications of any kind |
@@ -85,12 +85,12 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | 4 | ZengaPay production account | Daniel | Then: live token + HMAC secret in `.env` |
 | 5 | ~~Domain + SSL~~ ✅ | Done | `https://myfipay.com` live 2026-07-18 (Cloudflare proxy + certbot + UFW) |
 | 6 | ~~Landing page + signup/login UI~~ ✅ | Done | `site/` live 2026-07-18; signup→KYC gate→login→stats verified e2e over HTTPS. Account page is a stub until dashboard (#2) lands |
-| 7 | Router self-onboarding wizard | Claude | Register device in dashboard → per-device RADIUS secret → generated MikroTik setup script → connection test. Uses the dormant `devices` table; also closes the P1 `clients.conf` lockdown security item (§3 stage 5) |
+| 7 | ~~Router self-onboarding wizard~~ ✅ | Done | Live + smoke-tested 2026-07-18: dashboard Routers view → device + `nas` row (per-device secret) → cron `radius-sync.sh` (UFW + FreeRADIUS reload ≤1min) → MikroTik script + login.html download → connection test via `radpostauth.nasipaddress`. Real-router verification folded into #3 |
 | 8 | Founder dry-run | Daniel | Sign up → first paid session with zero server access. Gates M8 (§3 litmus test) |
 
 ### P1 — before real money flows
 - [ ] Webhook IP allowlist middleware
-- [ ] Rotate RADIUS secret (pre-scrub exposure) — ~~admin password~~ ✅ rotated 2026-07-18, verified via live login; new value held by Daniel only (not in repo)
+- [x] ~~Rotate RADIUS secret~~ ✅ resolved 2026-07-18 via `clients.conf` lockdown — the exposed shared secret's `0.0.0.0/0` client no longer exists; routers use per-device random secrets (— admin password rotated earlier same day)
 - [ ] CORS pinned origins (prod mode)
 - [ ] Offsite backups to DO Spaces
 - [ ] ~~NAS device registration flow~~ → folded into P0 #7 (router self-onboarding wizard)
@@ -146,6 +146,9 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | Dashboard live e2e (admin): KYC queue lists pending signup → approve via API → operator login succeeds | ✅ | 2026-07-18 |
 | Dashboard live e2e (agent): register → all 5 agent endpoints return; invite URL now myfipay.com/signup?agent= | ✅ | 2026-07-18 |
 | Bug fix verified: revenue-chart `day` was empty (DATE→string scan swallowed); now returns ISO dates | ✅ | 2026-07-18 |
+| Router onboarding e2e: register device via API → `nas` row → cron sync adds UFW rule + FreeRADIUS logs "Adding client 203.0.113.10 (mfb-…)" → script/status endpoints OK → delete → UFW rule + rows removed | ✅ | 2026-07-18 |
+| `radpostauth.nasipaddress` populated by patched postauth query (radtest → row shows `127.0.0.1`) | ✅ | 2026-07-18 |
+| Portal `?login=` (MikroTik `$(link-login-only)`) rendered into page; `javascript:` scheme rejected | ✅ | 2026-07-18 |
 
 ---
 
@@ -199,6 +202,14 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-18 (late night, cont.) — Router self-onboarding wizard live (P0 #7)
+- Built + deployed across two sessions (context break mid-way; second session verified everything live rather than re-building): migration `005` (`nas` table + `radpostauth.nasipaddress`), `handlers/device.go` (CRUD + MikroTik script + connection test, tenant-scoped, platform-wide IP uniqueness), dashboard **Routers** view (add/edit/remove, setup modal with copy-paste RouterOS script + `login.html` download, connection test), `scripts/radius-sync.sh` (cron every minute: UFW per-router allow rules tagged `myfibase-nas` + FreeRADIUS restart, hash-gated no-op)
+- Host config (mirrored into `freeradius/` in repo, secrets scrubbed, + new `freeradius/README.md`): `clients.conf` reduced to localhost-only — **the `0.0.0.0/0` shared-secret client is gone**; `mods-enabled/sql` `read_clients=yes` from `nas` table; `queries.conf` postauth patched to record packet source IP
+- Portal: accepts MikroTik `$(link-login-only)` as `?login=` (scheme-validated) and, after payment/voucher, logs the device into the hotspot via RADIUS instead of bouncing to google.com; voucher redemption now sends phone+MAC
+- Smoke-tested live end-to-end (temp operator in demo tenant, removed after): register 203.0.113.10 → cron picked it up in <1min (UFW rule + FreeRADIUS "Adding client"), script/status endpoints, delete → full cleanup. DB back to 2 tenants / 2 users / 0 devices
+- Security items closed: `clients.conf` lockdown + RADIUS shared-secret exposure (P1)
+- Founder dry-run now blocked only on: real MikroTik test (P0 #3), ZengaPay prod (P0 #4)
 
 ### 2026-07-18 (late night) — Operator dashboard rebuilt and live
 - M3 rebuilt from scratch as a static SPA (`site/dashboard/` + `assets/dashboard.js/.css`) instead of the lost sandbox Next.js app — no Node runtime needed on the 1GB droplet, served by existing nginx `site/` root, cookie-JWT auth against the existing API

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -21,6 +22,7 @@ type portalData struct {
 	Slug         string
 	MAC          string
 	IP           string
+	LoginURL     string // hotspot $(link-login-only) — where to POST credentials after payment
 	DisplayName  string // computed: PortalName if set, else LocationName
 	Initial      string // first letter of DisplayName for logo placeholder
 }
@@ -132,6 +134,21 @@ var selectedMethod = 'mtn_momo';
 var slug = '{{.Slug}}';
 var deviceMAC = '{{.MAC}}';
 var deviceIP  = '{{.IP}}';
+var loginURL  = '{{.LoginURL}}';
+var lastPhone = '';
+
+// After a grant, log the device into the hotspot: the router sends our RADIUS
+// server an Access-Request for this username (radcheck Auth-Type Accept), then
+// opens the gate. Without a router login URL (e.g. direct browser visit), just
+// land somewhere neutral.
+function connectClient(username) {
+  if (loginURL) {
+    window.location.href = loginURL + (loginURL.indexOf('?') === -1 ? '?' : '&') +
+      'username=' + encodeURIComponent(username) + '&password=connect';
+  } else {
+    window.location.href = 'https://www.google.com';
+  }
+}
 
 function selectPlan(el, id, price) {
   document.querySelectorAll('.plan').forEach(function(p){ p.classList.remove('selected'); });
@@ -150,15 +167,16 @@ function selectMethod(el, method) {
 function pay() {
   if (!selectedPlan) { showStatus('Select a plan first', 'fail'); return; }
 
+  var phone = document.getElementById('phone').value.replace(/\D/g,'');
+  if (phone.length < 9) { showStatus('Enter a valid phone number', 'fail'); return; }
+  lastPhone = '256' + phone;
+
   if (selectedMethod === 'voucher') {
     var code = document.getElementById('voucher').value.trim();
     if (!code) { showStatus('Enter your voucher code', 'fail'); return; }
     redeemVoucher(code);
     return;
   }
-
-  var phone = document.getElementById('phone').value.replace(/\D/g,'');
-  if (phone.length < 9) { showStatus('Enter a valid phone number', 'fail'); return; }
 
   showStatus('Sending payment request...', 'pending');
 
@@ -184,13 +202,13 @@ function redeemVoucher(code) {
   fetch('/portal/' + slug + '/voucher', {
     method: 'POST',
     headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({code: code})
+    body: JSON.stringify({code: code, phone: lastPhone, mac: deviceMAC})
   })
   .then(function(r){ return r.json(); })
   .then(function(res){
     if (res.success) {
       showStatus('Voucher accepted! Connecting...', 'ok');
-      setTimeout(function(){ window.location.href = 'https://www.google.com'; }, 2000);
+      setTimeout(function(){ connectClient(lastPhone); }, 2000);
     } else {
       showStatus(res.error.message || 'Invalid voucher', 'fail');
     }
@@ -214,7 +232,7 @@ function pollStatus(paymentID) {
       if (s === 'successful') {
         clearInterval(interval);
         showStatus('Payment confirmed! You are now connected.', 'ok');
-        setTimeout(function(){ window.location.href = 'https://www.google.com'; }, 2000);
+        setTimeout(function(){ connectClient(lastPhone); }, 2000);
       } else if (s === 'failed') {
         clearInterval(interval);
         showStatus('Payment declined. Please try again.', 'fail');
@@ -291,6 +309,13 @@ func (h *Handler) PortalPage(w http.ResponseWriter, r *http.Request) {
 	mac := strings.ToLower(r.URL.Query().Get("mac"))
 	ip := r.URL.Query().Get("ip")
 
+	// Router login URL (MikroTik $(link-login-only)); only accept plain http(s)
+	// URLs so nothing else can be injected into the page.
+	loginURL := r.URL.Query().Get("login")
+	if u, err := url.Parse(loginURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		loginURL = ""
+	}
+
 	displayName := locName
 	if portalName != "" {
 		displayName = portalName
@@ -311,6 +336,7 @@ func (h *Handler) PortalPage(w http.ResponseWriter, r *http.Request) {
 		Plans:        plans,
 		MAC:          mac,
 		IP:           ip,
+		LoginURL:     loginURL,
 		DisplayName:  displayName,
 		Initial:      initial,
 	}

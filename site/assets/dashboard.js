@@ -390,6 +390,154 @@
     }).catch(errorView);
   }
 
+  function viewRouters() {
+    setTitle('Routers', '<button class="btn btn-primary btn-sm" id="add-router-btn">Add router</button>');
+    loading();
+    Promise.all([api('/api/devices'), api('/api/locations')]).then(function (r) {
+      var devices = r[0], locs = r[1];
+      var rows = devices.map(function (d) {
+        var seen = d.last_seen ? 'Last seen ' + dt(d.last_seen) : 'Never connected';
+        return '<tr><td>' + esc(d.name) + '</td><td>' + esc(d.location_name) + '</td><td>' + esc(d.nas_ip) +
+          '</td><td>' + (d.online ? pill('active') : '<span class="pill pill-mute">offline</span>') +
+          '<div class="hint">' + esc(seen) + '</div></td><td><div class="row-actions">' +
+          '<button class="btn btn-ghost btn-sm act-setup" data-id="' + esc(d.id) + '">Setup</button>' +
+          '<button class="btn btn-ghost btn-sm act-test" data-id="' + esc(d.id) + '">Test</button>' +
+          '<button class="btn btn-ghost btn-sm act-edit" data-id="' + esc(d.id) + '">Edit</button>' +
+          '<button class="btn btn-danger btn-sm act-del" data-id="' + esc(d.id) + '">Remove</button>' +
+          '</div></td></tr>';
+      });
+      content().innerHTML =
+        '<div class="panel">' +
+        table(['Router', 'Location', 'Public IP', 'Status', ''], rows,
+          'No routers connected yet. Add your MikroTik router to link it to your payment portal — no technical support needed.') +
+        '</div>' +
+        '<div class="panel"><h2>How it works</h2><p class="hint">' +
+        '1. Add your router with its public IP address &nbsp;→&nbsp; 2. Paste the generated setup script into the MikroTik terminal ' +
+        'and upload the login page file &nbsp;→&nbsp; 3. Run the connection test. ' +
+        'Within a minute of adding a router, our RADIUS server starts accepting it. Your router needs a public IP ' +
+        '(on MikroTik, check IP → Cloud, or search "what is my IP" from a device on the router\'s internet connection).</p></div>';
+
+      el('add-router-btn').addEventListener('click', function () {
+        if (!locs.length) { alert('Create a location first — a router belongs to a location.'); return; }
+        openModal('Add your router',
+          '<div class="alert alert-error"></div><form id="router-form">' +
+          field('Router name', 'name', 'required placeholder="e.g. Main Street MikroTik"') +
+          selectField('Location', 'location_id', locationOptions(locs)) +
+          field('Router public IP', 'nas_ip', 'required placeholder="e.g. 41.210.12.34"',
+            'The internet-facing IP of your router. On MikroTik: IP → Cloud shows it, or search "what is my IP".') +
+          '<button class="btn btn-primary btn-block" type="submit">Register router</button></form>');
+        var form = el('router-form');
+        var errBox = form.querySelector('.alert-error');
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          errBox.classList.remove('show');
+          api('/api/devices', { method: 'POST', body: {
+            name: fval(form, 'name'), location_id: fval(form, 'location_id'), nas_ip: fval(form, 'nas_ip')
+          } }).then(function (d) {
+            setupModal(d);
+          }).catch(function (err) {
+            errBox.textContent = err.message; errBox.classList.add('show');
+          });
+        });
+      });
+
+      content().querySelectorAll('.act-setup').forEach(function (b) {
+        b.addEventListener('click', function () {
+          setupModal(devices.find(function (x) { return x.id === b.dataset.id; }));
+        });
+      });
+      content().querySelectorAll('.act-test').forEach(function (b) {
+        b.addEventListener('click', function () { testModal(b.dataset.id); });
+      });
+      content().querySelectorAll('.act-edit').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var d = devices.find(function (x) { return x.id === b.dataset.id; });
+          openModal('Edit router',
+            '<div class="alert alert-error"></div><form id="redit-form">' +
+            field('Router name', 'name', 'required value="' + esc(d.name) + '"') +
+            field('Router public IP', 'nas_ip', 'required value="' + esc(d.nas_ip) + '"',
+              'If your router\'s public IP changed, update it here — RADIUS follows within a minute.') +
+            '<button class="btn btn-primary btn-block" type="submit">Save</button></form>');
+          modalForm('redit-form', function (form) {
+            return api('/api/devices/' + d.id, { method: 'PUT', body: {
+              name: fval(form, 'name'), nas_ip: fval(form, 'nas_ip')
+            } });
+          });
+        });
+      });
+      content().querySelectorAll('.act-del').forEach(function (b) {
+        b.addEventListener('click', function () {
+          if (!confirm('Remove this router? It will no longer be able to authenticate customers.')) return;
+          api('/api/devices/' + b.dataset.id, { method: 'DELETE' }).then(viewRouters).catch(function (e) { alert(e.message); });
+        });
+      });
+    }).catch(errorView);
+  }
+
+  function routerLoginHTML(slug) {
+    var u = 'https://myfipay.com/portal/' + slug + '/?mac=$(mac)&ip=$(ip)&login=$(link-login-only)';
+    return '<html><head><meta http-equiv="refresh" content="0; url=' + u + '"></head>' +
+      '<body><a href="' + u + '">Continue to payment portal</a></body></html>\n';
+  }
+
+  function setupModal(d) {
+    fetch('/api/devices/' + d.id + '/script', { credentials: 'same-origin' }).then(function (res) {
+      if (res.status === 401) { location.href = '/login'; throw new Error('unauthenticated'); }
+      if (!res.ok) throw new Error('could not load setup script');
+      return res.text();
+    }).then(function (script) {
+      openModal('Set up — ' + d.name,
+        '<p class="hint" style="margin-bottom:10px"><strong>Step 1.</strong> On the router, run MikroTik\'s built-in Hotspot Setup once (IP → Hotspot → Hotspot Setup) if you haven\'t.</p>' +
+        '<p class="hint" style="margin-bottom:6px"><strong>Step 2.</strong> Copy this script and paste it into the MikroTik Terminal:</p>' +
+        '<textarea readonly style="width:100%;height:180px;font-family:monospace;font-size:12px;border:1px solid var(--line);border-radius:8px;padding:10px">' + esc(script) + '</textarea>' +
+        '<div class="copy-row" style="margin:8px 0 14px"><button class="btn btn-ghost btn-sm" id="copy-script">Copy script</button>' +
+        '<button class="btn btn-ghost btn-sm" id="dl-login">Download login.html</button></div>' +
+        '<p class="hint" style="margin-bottom:10px"><strong>Step 3.</strong> Upload the downloaded <code>login.html</code> into the router\'s <code>hotspot</code> folder (Winbox → Files), replacing the existing one.</p>' +
+        '<p class="hint" style="margin-bottom:14px"><strong>Step 4.</strong> Wait one minute, then run the connection test.</p>' +
+        '<button class="btn btn-primary btn-block" id="goto-test">Test connection</button>');
+      el('copy-script').addEventListener('click', function () {
+        navigator.clipboard.writeText(script).then(function () {
+          el('copy-script').textContent = 'Copied!';
+          setTimeout(function () { el('copy-script').textContent = 'Copy script'; }, 1500);
+        });
+      });
+      el('dl-login').addEventListener('click', function () {
+        var blob = new Blob([routerLoginHTML(d.portal_slug)], { type: 'text/html' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'login.html';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+      el('goto-test').addEventListener('click', function () { testModal(d.id); });
+    }).catch(function (e) { alert(e.message); });
+  }
+
+  function testModal(deviceID) {
+    openModal('Connection test', '<p class="empty-note" id="test-out">Checking…</p>' +
+      '<button class="btn btn-primary btn-block" id="retest">Check again</button>' +
+      '<p class="hint" style="margin-top:10px">Tip: connect a phone to the WiFi and try to open any website — ' +
+      'the portal should appear. That attempt registers here within seconds.</p>');
+    function run() {
+      el('test-out').textContent = 'Checking…';
+      api('/api/devices/' + deviceID + '/status').then(function (s) {
+        var msg;
+        if (s.online) {
+          msg = '✅ Router is talking to myFiPay! Last activity: ' + dt(s.last_seen) + '.';
+        } else if (s.last_seen) {
+          msg = '⚠️ Router has connected before (last: ' + dt(s.last_seen) + ') but not in the past 10 minutes. ' +
+            'Trigger a login attempt from a phone on the WiFi and check again.';
+        } else {
+          msg = '❌ No contact from this router yet. Make sure the script ran without errors and the router\'s ' +
+            'public IP is correct, wait a minute, then have a phone on the WiFi try to open a website.';
+        }
+        el('test-out').textContent = msg;
+      }).catch(function (e) { el('test-out').textContent = 'Check failed: ' + e.message; });
+    }
+    el('retest').addEventListener('click', run);
+    run();
+  }
+
   function viewPayments() {
     var method = viewPayments.filter || '';
     setTitle('Payments');
@@ -804,6 +952,7 @@
     sessions: { title: 'Sessions', view: viewSessions, roles: ['operator'] },
     plans: { title: 'Plans', view: viewPlans, roles: ['operator'] },
     locations: { title: 'Locations', view: viewLocations, roles: ['operator'] },
+    routers: { title: 'Routers', view: viewRouters, roles: ['operator'] },
     payments: { title: 'Payments', view: viewPayments, roles: ['operator'] },
     vouchers: { title: 'Vouchers', view: viewVouchers, roles: ['operator'] },
     payouts: { title: 'Payouts', view: viewPayouts, roles: ['operator'] },
