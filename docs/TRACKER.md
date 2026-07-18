@@ -90,7 +90,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 
 ### P1 — before real money flows
 - [ ] Webhook IP allowlist middleware
-- [ ] Rotate admin password + RADIUS secret (pre-scrub exposure)
+- [ ] Rotate RADIUS secret (pre-scrub exposure) — ~~admin password~~ ✅ rotated 2026-07-18, verified via live login; new value held by Daniel only (not in repo)
 - [ ] CORS pinned origins (prod mode)
 - [ ] Offsite backups to DO Spaces
 - [ ] ~~NAS device registration flow~~ → folded into P0 #7 (router self-onboarding wizard)
