@@ -18,7 +18,7 @@
 | M3 Operator dashboard MVP | ⚠️ **code missing** | Built in preview sandbox 2026-06-25; `dashboard/` on server is **empty** — must be recovered or rebuilt |
 | M4 Vouchers + cash sessions | ✅ | Batches, redemption, PDF/QR, cash grant — all in API |
 | M4.5 Agent network (API) | ✅ 2026-07-18 | Full API + DB live; UI pending |
-| M5 SSL + domain + Nairobi prod | ⏳ | Domain/DNS handled by Daniel |
+| M5 SSL + domain + Nairobi prod | ⏳ **unblocked** | `myfipay.com` purchased (Cloudflare, 2026-07-18); NS active, **no A records yet** — next: A record → 170.64.177.20, nginx server_name, SSL |
 | M6 Mobile app (Expo) | ❌ | Not started |
 | M7 Edge agent (Pi/CHR) | ❌ | Not started |
 | M8 Pilot launch — Soroti | ❌ | Blocked on: M3 recovery, MikroTik live test, ZengaPay prod |
@@ -37,11 +37,12 @@
 - [x] Balance over-withdrawal guard on payouts (operator and agent), min UGX 5,000
 - [x] Tenant isolation — every operator query scoped by `tenant_id` from JWT claims
 - [x] Secrets hygiene — `.env` gitignored; credentials scrubbed from repo configs/docs (2026-07-18); `.env.example` template committed
-- [x] All services bound to 127.0.0.1 except nginx :80; UFW active
+- [x] All services bound to 127.0.0.1 except nginx :80 and SSH
 - [x] Daily 2am backups (pg_dump + code, 7-day retention) via cron
 
 ### Required before real money (P0/P1 below) ❌
-- [ ] **HTTPS everywhere** — portal sends phone numbers, dashboard sends passwords over HTTP (blocked on domain — Daniel)
+- [ ] **UFW is INACTIVE** (found 2026-07-18 audit — tracker previously claimed active). RADIUS UDP 1812/1813 is bound 0.0.0.0 **and** `clients.conf` has a `0.0.0.0/0` client with the pre-scrub secret → anyone on the internet can talk to RADIUS. Re-enable UFW (allow 22, 80, 443; RADIUS only from known NAS IPs)
+- [ ] **HTTPS everywhere** — portal sends phone numbers, dashboard sends passwords over HTTP (domain now available — unblocked)
 - [ ] ZengaPay webhook IP allowlist (fires from known IPs; one middleware)
 - [ ] `clients.conf` locked to registered NAS IPs + per-device secrets (`devices` table exists, unused)
 - [ ] Rotate super-admin password (current one was documented in this repo pre-scrub) + rotate RADIUS secret (same reason)
@@ -58,11 +59,11 @@
 ### P0 — blocking pilot (M8)
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| 1 | Push repo to GitHub | Claude (blocked) | Deploy key generated 2026-07-18 — **waiting for Daniel to add it to repo settings** |
+| 1 | ~~Push repo to GitHub~~ ✅ | Done | Verified 2026-07-18: `origin/main` matches local HEAD (`89df9e6`); git history confirmed clean of RADIUS secret |
 | 2 | Recover or rebuild operator dashboard | Daniel decides | `dashboard/` empty on server; if sandbox code is lost, rebuild from the 16-item feature list (§5 M3) |
 | 3 | MikroTik live test | Daniel + Claude | Real router → RADIUS; everything so far is `radtest` only |
 | 4 | ZengaPay production account | Daniel | Then: live token + HMAC secret in `.env` |
-| 5 | Domain + SSL | Daniel | Self-assigned |
+| 5 | Domain + SSL | Daniel + Claude | `myfipay.com` bought (Cloudflare); next: A record → 170.64.177.20, then nginx + SSL (Cloudflare proxy or certbot) |
 
 ### P1 — before real money flows
 - [ ] Webhook IP allowlist middleware
@@ -163,6 +164,13 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 7. Session Log (newest first)
+
+### 2026-07-18 (later) — Verification audit; domain purchased
+- `myfipay.com` purchased on Cloudflare (NS live: lady/dane.ns.cloudflare.com); **no A records yet** — M5 unblocked
+- GitHub push confirmed complete: `origin/main` == local `89df9e6`; searched full git history — RADIUS secret never committed
+- **Found: UFW inactive** (tracker had claimed active) while `clients.conf` allows `0.0.0.0/0` with the pre-scrub RADIUS secret and 1812/1813 bound publicly — escalated to top of pre-money security list
+- Verified live: all 4 containers up (API 4h, DB/Redis/Adminer 3wk healthy), `/health` OK, nginx + FreeRADIUS active, portal `/portal/demo/` 200, daily backups current (last: 2026-07-18 02:00), migrations schema present (20 tables). `dashboard/` and `edge-agent/` confirmed still empty
+- DB state: 2 tenants, 1 location, 3 plans, 1 payment, 2 sessions, 0 vouchers/commissions/referrals
 
 ### 2026-07-18 — Audit, agent network deploy, repo secured
 - Full audit against live DB (not tracker claims). Found: `dashboard/` + `edge-agent/` **empty** despite M3 "complete"; `sessions.mac_address` live-only ALTER (no migration); duplicate `003_` migration numbers; no git remote, 24 files uncommitted
