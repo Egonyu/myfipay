@@ -50,7 +50,7 @@
 - [x] **`clients.conf` locked down** (verified 2026-07-18): the `0.0.0.0/0` shared-secret client is gone; NAS clients now come from the `nas` table (per-device random secrets, written by the router wizard), UFW opens 1812-1813 only per registered router IP (`radius-sync.sh` cron). Only a localhost test client remains in `clients.conf`. This also closes the RADIUS-secret exposure: the shared secret no longer authenticates any external client
 - [x] Rotate super-admin password ✅ 2026-07-18 · RADIUS shared-secret exposure closed via `clients.conf` lockdown above (shared client removed entirely; per-device secrets now)
 - [ ] Offsite backups — current backups live on the same disk they protect (DO Spaces, ~5 lines in backup.sh)
-- [ ] Fail2ban (SSH is on a public IP) + logrotate (25GB disk)
+- [x] **Fail2ban + logrotate** ✅ verified 2026-07-19: `fail2ban-server` active since Jul 07, sshd jail has 3,497 total bans (26k failed attempts); logrotate configs present incl. freeradius
 - [ ] CORS allowlist — currently echoes any Origin with credentials=true; must pin to dashboard origin(s) in prod
 - [ ] Login rate limiting / lockout (bcrypt slows brute force but nothing counts failures)
 - [ ] Session token revocation (Redis denylist) — currently JWTs live 24h with no kill switch
@@ -112,7 +112,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 - [ ] ~~Integration test pay→webhook→session~~ → promoted to P0-E
 - [ ] Dashboard XSS audit — review every innerHTML interpolation for esc() coverage
 - [ ] `radius-sync.sh`: reload instead of full FreeRADIUS restart (drops in-flight auths); remove Adminer from prod box
-- [ ] Fail2ban + logrotate
+- [x] ~~Fail2ban + logrotate~~ ✅ verified 2026-07-19 (see §2)
 
 ### P2 — product completeness
 - [ ] Agent dashboard UI (backend shipped 2026-07-18, zero UI)
