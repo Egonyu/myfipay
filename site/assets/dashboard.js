@@ -443,7 +443,8 @@
     Promise.all([api('/api/devices'), api('/api/locations')]).then(function (r) {
       var devices = r[0], locs = r[1];
       var rows = devices.map(function (d) {
-        var seen = d.last_seen ? 'Last seen ' + dt(d.last_seen) : 'Never connected';
+        var seen = d.last_seen ? 'Last seen ' + dt(d.last_seen)
+          : (d.last_ping ? 'Reachable, no logins yet' : 'Never connected');
         return '<tr><td>' + esc(d.name) + '</td><td>' + esc(d.location_name) + '</td><td>' + esc(d.nas_ip) +
           '</td><td>' + (d.online ? pill('active') : '<span class="pill pill-mute">offline</span>') +
           '<div class="hint">' + esc(seen) + '</div></td><td><div class="row-actions">' +
@@ -569,8 +570,11 @@
       el('test-out').textContent = 'Checking…';
       api('/api/devices/' + deviceID + '/status').then(function (s) {
         var msg;
-        if (s.online) {
+        if (s.online && s.last_seen) {
           msg = '✅ Router is talking to myFiPay! Last activity: ' + dt(s.last_seen) + '.';
+        } else if (s.online) {
+          msg = '🟡 Router is reachable (ping OK) but hasn\'t sent any login traffic yet. ' +
+            'Make sure the setup script ran without errors, then have a phone on the WiFi try to open a website.';
         } else if (s.last_seen) {
           msg = '⚠️ Router has connected before (last: ' + dt(s.last_seen) + ') but not in the past 10 minutes. ' +
             'Trigger a login attempt from a phone on the WiFi and check again.';

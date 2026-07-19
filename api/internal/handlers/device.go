@@ -43,6 +43,7 @@ type deviceRow struct {
 	PortalSlug string     `json:"portal_slug"`
 	Online     bool       `json:"online"`
 	LastSeen   *time.Time `json:"last_seen"`
+	LastPing   *time.Time `json:"last_ping"`
 	CreatedAt  time.Time  `json:"created_at"`
 }
 
@@ -50,11 +51,11 @@ func (h *Handler) deviceByID(ctx context.Context, deviceID, tenantID string) (*d
 	var d deviceRow
 	err := h.db.QueryRow(ctx, `
 		SELECT d.id, COALESCE(d.name,''), d.type, COALESCE(host(d.nas_ip),''), d.radius_secret,
-		       l.id, l.name, l.portal_slug, d.online, d.last_seen, d.created_at
+		       l.id, l.name, l.portal_slug, d.online, d.last_seen, d.last_ping, d.created_at
 		FROM devices d JOIN locations l ON d.location_id = l.id
 		WHERE d.id = $1 AND l.tenant_id = $2 LIMIT 1
 	`, deviceID, tenantID).Scan(&d.ID, &d.Name, &d.Type, &d.NasIP, &d.Secret,
-		&d.LocationID, &d.Location, &d.PortalSlug, &d.Online, &d.LastSeen, &d.CreatedAt)
+		&d.LocationID, &d.Location, &d.PortalSlug, &d.Online, &d.LastSeen, &d.LastPing, &d.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +68,7 @@ func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := h.db.Query(ctx, `
 		SELECT d.id, COALESCE(d.name,''), d.type, COALESCE(host(d.nas_ip),''), d.radius_secret,
-		       l.id, l.name, l.portal_slug, d.online, d.last_seen, d.created_at
+		       l.id, l.name, l.portal_slug, d.online, d.last_seen, d.last_ping, d.created_at
 		FROM devices d JOIN locations l ON d.location_id = l.id
 		WHERE l.tenant_id = $1 ORDER BY d.created_at DESC
 	`, claims.TenantID)
@@ -81,7 +82,7 @@ func (h *Handler) ListDevices(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var d deviceRow
 		if err := rows.Scan(&d.ID, &d.Name, &d.Type, &d.NasIP, &d.Secret,
-			&d.LocationID, &d.Location, &d.PortalSlug, &d.Online, &d.LastSeen, &d.CreatedAt); err == nil {
+			&d.LocationID, &d.Location, &d.PortalSlug, &d.Online, &d.LastSeen, &d.LastPing, &d.CreatedAt); err == nil {
 			devices = append(devices, d)
 		}
 	}
@@ -295,8 +296,10 @@ func (h *Handler) DeviceScript(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(script))
 }
 
-// DeviceStatus reports whether this router has talked RADIUS to us, based on
-// auth attempts (radpostauth.nasipaddress = packet source) and accounting.
+// DeviceStatus reports router health from two signals: RADIUS traffic (auth
+// attempts in radpostauth, accounting in radacct) and the ICMP heartbeat cron
+// (devices.last_ping, scripts/router-heartbeat.sh). Online means either signal
+// is fresh — RADIUS alone can't tell a dead router from one with no customers.
 func (h *Handler) DeviceStatus(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetClaims(r)
 	deviceID := chi.URLParam(r, "id")
@@ -319,7 +322,9 @@ func (h *Handler) DeviceStatus(w http.ResponseWriter, r *http.Request) {
 	if lastAcct != nil && (lastSeen == nil || lastAcct.After(*lastSeen)) {
 		lastSeen = lastAcct
 	}
-	online := lastSeen != nil && time.Since(*lastSeen) < 10*time.Minute
+	radiusFresh := lastSeen != nil && time.Since(*lastSeen) < 10*time.Minute
+	pingFresh := d.LastPing != nil && time.Since(*d.LastPing) < 3*time.Minute
+	online := radiusFresh || pingFresh
 
 	h.db.Exec(ctx, `UPDATE devices SET online=$1, last_seen=COALESCE($2, last_seen), updated_at=NOW() WHERE id=$3`,
 		online, lastSeen, deviceID)
@@ -327,6 +332,7 @@ func (h *Handler) DeviceStatus(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, map[string]any{
 		"online":     online,
 		"last_seen":  lastSeen,
+		"last_ping":  d.LastPing,
 		"last_auth":  lastAuth,
 		"last_acct":  lastAcct,
 		"checked_at": time.Now().UTC(),
