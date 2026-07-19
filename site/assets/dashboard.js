@@ -1054,7 +1054,9 @@
       return (r.sep ? '<div class="nav-sep">' + esc(r.sep) + '</div>' : '') +
         '<a href="#/' + name + '" data-route="' + name + '">' + ic(r.icon, 18) +
         '<span>' + esc(r.title) + '</span></a>';
-    }).join('');
+    }).join('') +
+      '<div class="nav-sep">Help</div>' +
+      '<a href="/support" target="_blank" rel="noopener">' + ic('globe', 18) + '<span>Support &amp; FAQ</span></a>';
     el('dash-nav').addEventListener('click', function () {
       el('sidebar').classList.remove('open');
     });

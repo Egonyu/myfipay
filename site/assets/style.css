@@ -141,3 +141,15 @@ section.alt { background: var(--paper); }
 /* Footer */
 .site-footer { border-top: 1px solid var(--line); padding: 30px 0; margin-top: 40px; }
 .site-footer .container { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-size: 0.88rem; color: var(--muted); }
+
+/* ── support / FAQ page ── */
+.hero-sm { padding: 56px 0 40px; }
+.faq-wrap { max-width: 760px; }
+.faq-wrap .section-title { margin-top: 36px; text-align: left; }
+.faq-wrap .section-title:first-child { margin-top: 0; }
+.faq { background: #fff; border: 1px solid var(--line, #e5e7eb); border-radius: 10px; margin-bottom: 10px; padding: 0 18px; }
+.faq summary { cursor: pointer; font-weight: 600; padding: 14px 0; list-style: none; position: relative; padding-right: 28px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; position: absolute; right: 2px; top: 50%; transform: translateY(-50%); color: var(--muted, #6b7280); font-size: 1.2rem; }
+.faq[open] summary::after { content: "–"; }
+.faq p { color: var(--muted, #6b7280); padding: 0 0 16px; font-size: 0.95rem; line-height: 1.55; }
