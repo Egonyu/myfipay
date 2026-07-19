@@ -5,6 +5,8 @@
 **Last updated:** 2026-07-19
 
 > **Rules for this tracker:** update it in the same session as the work; never mark an item ✅ unless it is verified on this server (code present, running, or query-confirmed). Items built elsewhere get ⚠️ until they land here. Security items are never "later" once real money flows.
+>
+> **Binding since 2026-07-19:** `docs/ENGINEERING_STANDARDS.md` — tests + CI on money paths, no live-editing prod, monitoring before pilot, stability before external integrations. Priority order everywhere: correctness systems → security → operability → new features.
 
 ---
 
@@ -76,7 +78,16 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 
 ## 4. Prioritized Backlog
 
-### P0 — blocking pilot (M8)
+### P0 — correctness & stability systems (reprioritized 2026-07-19 per ENGINEERING_STANDARDS.md; these now come before external integrations)
+| # | Task | Owner | Notes |
+|---|---|---|---|
+| A | Unit tests: commission math, payout balance math, webhook dedup, HMAC verify | Claude | The money paths — moved up from P1. Started 2026-07-19 |
+| B | CI: GitHub Actions — `go vet` + `go test` on every push | Claude | Tests that don't run automatically don't exist. Moved up from P3 |
+| C | Deploy step (git-driven) — stop live-editing prod | Claude | `site/` is currently the live web root edited in place; API deploys are manual `docker compose` |
+| D | Uptime + error monitoring (Uptime Kuma or external ping + API error log surfacing) | Claude | Moved up from P3 — "a customer told us" is not monitoring |
+| E | Integration test: pay → webhook → session grant (ephemeral DB/Redis) | Claude | Moved up from P1 |
+
+### P0.5 — pilot gate (M8) — after P0 systems are green
 | # | Task | Owner | Notes |
 |---|---|---|---|
 | 1 | ~~Push repo to GitHub~~ ✅ | Done | Verified 2026-07-18: `origin/main` matches local HEAD (`89df9e6`); git history confirmed clean of RADIUS secret |
@@ -93,12 +104,14 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 - [x] ~~Rotate RADIUS secret~~ ✅ resolved 2026-07-18 via `clients.conf` lockdown — the exposed shared secret's `0.0.0.0/0` client no longer exists; routers use per-device random secrets (— admin password rotated earlier same day)
 - [ ] CORS pinned origins (prod mode)
 - [ ] Offsite backups to DO Spaces
-- [ ] ~~NAS device registration flow~~ → folded into P0 #7 (router self-onboarding wizard)
+- [ ] ~~NAS device registration flow~~ → folded into P0.5 #7 (router self-onboarding wizard)
 - [ ] Email delivery infra (SMTP/SES/Resend): KYC approve/reject notification, password reset, receipts — prerequisite for several P2 items and for the KYC flow's "you will be notified" promise
 - [ ] ToS + privacy policy + published fee schedule (8% platform, 3% agent) — trust/legal before real money
 - [ ] Login attempt rate limiting
-- [ ] Unit tests: commission math, payout balance math, webhook dedup, HMAC verify — the money paths
-- [ ] Integration test: pay → webhook → session → RADIUS accept
+- [ ] ~~Unit tests (money paths)~~ → promoted to P0-A
+- [ ] ~~Integration test pay→webhook→session~~ → promoted to P0-E
+- [ ] Dashboard XSS audit — review every innerHTML interpolation for esc() coverage
+- [ ] `radius-sync.sh`: reload instead of full FreeRADIUS restart (drops in-flight auths); remove Adminer from prod box
 - [ ] Fail2ban + logrotate
 
 ### P2 — product completeness
@@ -119,9 +132,9 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 ### P3 — scale phase
 - [ ] Mobile app (Expo): scaffold, login, home, sessions, manual grant
 - [ ] Edge agent (Pi/CHR): mini RADIUS proxy, SQLite cache, payment queue, heartbeat, ARM build, installer, OTA
-- [ ] CI/CD (GitHub Actions: build + vet + test on PR)
+- [ ] ~~CI/CD~~ → promoted to P0-B (2026-07-19)
 - [ ] Nairobi prod droplet + separate DB droplet
-- [ ] Prometheus/Grafana or Uptime Kuma monitoring
+- [ ] ~~Monitoring~~ → promoted to P0-D (2026-07-19); Prometheus/Grafana remains here for scale phase
 
 ---
 

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,16 +24,11 @@ const minPayoutUGX = 5000
 // net = grossMobileMoney * (1 - commission) - (pending + approved + paid payouts).
 func (h *Handler) tenantBalance(ctx context.Context, tenantID string) (gross, commission, withdrawn, available int, rate float64) {
 	// Commission rate (per-tenant override, else default).
-	rate = defaultCommissionRate
 	var rateStr string
 	h.db.QueryRow(ctx,
 		`SELECT COALESCE(settings->>'commission_rate', '') FROM tenants WHERE id = $1`,
 		tenantID).Scan(&rateStr)
-	if rateStr != "" {
-		if parsed, err := strconv.ParseFloat(rateStr, 64); err == nil && parsed >= 0 && parsed < 1 {
-			rate = parsed
-		}
-	}
+	rate = parseCommissionRate(rateStr, defaultCommissionRate)
 
 	// Gross mobile-money revenue confirmed for this tenant's locations.
 	h.db.QueryRow(ctx, `
@@ -51,11 +45,8 @@ func (h *Handler) tenantBalance(ctx context.Context, tenantID string) (gross, co
 		WHERE tenant_id = $1 AND status IN ('pending', 'approved', 'paid')
 	`, tenantID).Scan(&withdrawn)
 
-	commission = int(float64(gross) * rate)
-	available = gross - commission - withdrawn
-	if available < 0 {
-		available = 0
-	}
+	commission = platformCommission(gross, rate)
+	available = operatorAvailable(gross, rate, withdrawn)
 	return
 }
 

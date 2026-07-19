@@ -141,7 +141,7 @@ func (h *Handler) AgentDashboard(w http.ResponseWriter, r *http.Request) {
 		claims.TenantID,
 	).Scan(&reservedForPayouts)
 
-	availableBalance := totalEarned - reservedForPayouts
+	availableBalance := agentAvailable(int(totalEarned), int(reservedForPayouts))
 
 	var pendingPayouts int
 	h.db.QueryRow(ctx,
@@ -297,7 +297,7 @@ func (h *Handler) RequestPayout(w http.ResponseWriter, r *http.Request) {
 		claims.TenantID,
 	).Scan(&reserved)
 
-	available := int(totalEarned) - int(reserved)
+	available := agentAvailable(int(totalEarned), int(reserved))
 	if req.AmountUGX > available {
 		respondError(w, http.StatusUnprocessableEntity, "INSUFFICIENT_BALANCE",
 			fmt.Sprintf("available balance is %d UGX", available))

@@ -274,16 +274,11 @@ func (h *Handler) ZengapayWebhook(w http.ResponseWriter, r *http.Request) {
 
 	pendingKey := "payment:pending:" + paymentID
 
-	// Match on event name OR transactionStatus field — sandbox uses event, production may differ.
-	statusUpper := strings.ToUpper(txn.TransactionStatus)
-	eventUpper := strings.ToUpper(raw.Event)
-
-	switch {
-	case statusUpper == "SUCCEEDED" || statusUpper == "SUCCESSFUL" || statusUpper == "COMPLETED" ||
-		eventUpper == "COLLECTION.SUCCESS":
+	switch classifyZengapayEvent(txn.TransactionStatus, raw.Event) {
+	case "success":
 		h.cache.HSet(ctx, pendingKey, "status", "successful", "zengapay_ref", txn.TransactionReference)
 		go h.createSessionAfterPayment(paymentID, txn.Phone)
-	case statusUpper == "FAILED" || statusUpper == "FAILURE" || eventUpper == "COLLECTION.FAILED":
+	case "failed":
 		h.cache.HSet(ctx, pendingKey, "status", "failed")
 	}
 
@@ -408,9 +403,8 @@ func (h *Handler) createAgentCommission(ctx context.Context, locationSlug, payme
 		return
 	}
 
-	// Truncates below 1 UGX — free plans and sub-unit amounts earn no commission.
-	commissionUGX := int(float64(amountUGX) * agentCommissionRate)
-	if commissionUGX < 1 {
+	commissionUGX := agentCommission(amountUGX, agentCommissionRate)
+	if commissionUGX == 0 {
 		return
 	}
 
