@@ -92,7 +92,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 |---|---|---|---|
 | 1 | ~~Push repo to GitHub~~ ✅ | Done | Verified 2026-07-18: `origin/main` matches local HEAD (`89df9e6`); git history confirmed clean of RADIUS secret |
 | 2 | ~~Recover or rebuild operator dashboard~~ ✅ | Done | Rebuilt 2026-07-18 as static app at `/dashboard/`: operator (overview+chart, sessions grant/extend/terminate, plans CRUD, locations+branding, payments, vouchers+print, payouts, settings), agent (invite/operators/commissions/payouts), admin (KYC queue, tenants, revenue, both payout queues, agents) |
-| 3 | MikroTik live test | Daniel + Claude | Real router → RADIUS; everything so far is `radtest` only |
+| 3 | MikroTik live test | Daniel + Claude | In progress 2026-07-19: CHR-on-DO droplet being rebuilt (first attempt at 170.64.169.239 died mid-conversion). Runbook: `docs/MIKROTIK_CHR_TEST.md` — Daniel rebuilds (Phase 0), then registration via dashboard + VPC hotspot-client test |
 | 4 | ZengaPay production account | Daniel | Then: live token + HMAC secret in `.env` |
 | 5 | ~~Domain + SSL~~ ✅ | Done | `https://myfipay.com` live 2026-07-18 (Cloudflare proxy + certbot + UFW) |
 | 6 | ~~Landing page + signup/login UI~~ ✅ | Done | `site/` live 2026-07-18; signup→KYC gate→login→stats verified e2e over HTTPS. Account page is a stub until dashboard (#2) lands |
@@ -225,7 +225,7 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ## 8. Session Log (newest first)
 
 ### 2026-07-19 (midday) — P0 closed; P1 security batch shipped (a2e5c14)
-- **Founder SSH timeout diagnosed: wrong IP.** Daniel was SSHing to `170.64.169.239`; this droplet is **`170.64.177.20`** (`ssh myfibase` alias). Server side verified clean: sshd active, ufw allows 22, fail2ban has never banned his IPs (197.239.11.74 / 102.34.18.9)
+- **Founder SSH timeout diagnosed:** `170.64.169.239` is the separate **MikroTik CHR test droplet** (not this server, which is `170.64.177.20`) — the CHR install died mid-conversion; Daniel is rebuilding it. Rebuild + live-test runbook written: `docs/MIKROTIK_CHR_TEST.md`. This server's SSH verified clean either way (sshd active, ufw 22 open, no fail2ban bans on his IPs)
 - P0-D closed: `uptime.yml` fired on GitHub's cron 3× today, all success → **P0 A–E all verified done**
 - P1 security batch (committed `a2e5c14`, CI-built image deployed):
   - Login lockout: Redis failure counters (20/IP, 10/acct per 15min, failures only, success heals acct); unit-tested
