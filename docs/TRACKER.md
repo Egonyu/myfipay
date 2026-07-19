@@ -100,6 +100,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | 8 | Founder dry-run | Daniel | Sign up → first paid session with zero server access. Gates M8 (§3 litmus test) |
 
 ### P1 — before real money flows
+- [ ] **Webhook idempotency on `transactionExternalReference`** — found live 2026-07-19: dedup keys only on `transactionReference`, so two webhooks with different refs for the same externalRef (our payment ID) each create a confirmed payment + commission (observed when the real sandbox webhook and a manual test webhook both landed). Fix: reject/skip when a confirmed payment already exists for that externalRef; needs unit + integration coverage. Mitigated in prod by HMAC + IP allowlist, but ZengaPay retries with fresh refs would double-credit
 - [x] ~~Webhook IP allowlist middleware~~ ✅ 2026-07-19 (env-gated; activate with prod IPs)
 - [x] ~~Rotate RADIUS secret~~ ✅ resolved 2026-07-18 via `clients.conf` lockdown — the exposed shared secret's `0.0.0.0/0` client no longer exists; routers use per-device random secrets (— admin password rotated earlier same day)
 - [x] ~~CORS pinned origins~~ ✅ 2026-07-19
@@ -227,6 +228,14 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-19 (late) — Dashboard demo data + credentials; webhook idempotency gap found
+- Super-admin password reset (bcrypt can't be recovered; old one was never handed over) — verified via live login; given to Daniel out-of-band
+- Demo agent created via real API (`agent-demo@myfipay.test`, invite `agent-demo-agent`), referral-linked to the `chr-test` operator that owns the CHR router — agent dashboard now shows 1 operator + commissions
+- Sandbox payment run through the real pipeline (portal pay → ZengaPay sandbox → webhook → session): payment confirmed, 3% commission created, and the paying "customer" logged into the live CHR hotspot — all three dashboard roles now have real data to visualize
+- **Real ZengaPay sandbox webhook observed arriving and processing** (their ref `b48a6be9…`) seconds before the manual test webhook — re-verifies the sandbox cycle live, and exposed the externalRef idempotency gap (new P1): two different transactionReferences for the same payment ID both credited
+- A real phone payment from 256759886260 (Daniel?) at 11:24 confirmed through the portal — if intentional, that's the sandbox money cycle from a real handset
+- Test-data note: `chr-test` tenant now holds ~4 confirmed payments / 2 commissions / several sessions of demo data; purge before any real metrics matter
 
 ### 2026-07-19 (afternoon) — MikroTik live test PASSED on rebuilt CHR
 - Daniel rebuilt the CHR droplet (170.64.169.239, RouterOS 7.16.2); networking had to be set via DO console (no DHCP on DO — this is what killed attempt #1). Claude drove everything after via SSH
