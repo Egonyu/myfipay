@@ -72,6 +72,7 @@ func New(ctx context.Context, cfg *config.Config, db *pgxpool.Pool, cache *redis
 		r.Get("/api/payouts", h.ListPayouts)
 		r.Get("/api/payouts/balance", h.GetPayoutBalance)
 		r.Post("/api/payouts", h.RequestOperatorPayout)
+		r.Get("/api/statement", h.OperatorStatement)
 
 		// Sessions
 		r.Get("/api/sessions", h.ListSessions)

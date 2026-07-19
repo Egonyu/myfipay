@@ -84,6 +84,7 @@
   var ICONS = {
     grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
     activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    filetext: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
     tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
     pin: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
     router: '<line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/>',
@@ -699,6 +700,31 @@
     }).catch(errorView);
   }
 
+  function viewStatement() {
+    setTitle('Statement');
+    loading();
+    api('/api/statement').then(function (s) {
+      var rows = s.months.map(function (m) {
+        return '<tr><td>' + esc(m.month) + '</td><td>' + ugx(m.mobile_money_ugx) + '</td><td>' + ugx(m.platform_fee_ugx) +
+          '</td><td><strong>' + ugx(m.net_earned_ugx) + '</strong></td><td>' + ugx(m.cash_ugx) + '</td><td>' + m.payments +
+          '</td><td>' + ugx(m.payouts_paid_ugx) + '</td></tr>';
+      });
+      var feePct = Math.round(s.fee_rate * 100);
+      content().innerHTML =
+        '<div class="tile-grid">' +
+        tile('blue', 'dollar', 'Available balance', ugx(s.available_ugx)) +
+        tile('cyan', 'card', 'Mobile money (all time)', ugx(s.gross_mobile_money_ugx)) +
+        tile('teal', 'barchart', 'Platform fees (' + feePct + '%)', ugx(s.commission_ugx)) +
+        tile('amber', 'activity', 'Paid out to date', ugx(s.paid_out_ugx)) +
+        '</div>' +
+        '<div class="panel"><h2>Monthly statement</h2>' +
+        table(['Month', 'Mobile money', 'Platform fee', 'Net earned', 'Cash sales', 'Payments', 'Paid out'], rows, 'No activity yet.') + '</div>' +
+        '<div class="panel"><h2>Fee schedule</h2><p class="hint">myFiPay charges <strong>' + feePct + '%</strong> on mobile-money sales collected through the platform — that is the only fee. ' +
+        'Cash sales and voucher sales you collect directly carry no platform fee. ' +
+        'Agent referral commissions (' + Math.round(s.agent_rate * 100) + '%) are paid by the platform and are never deducted from your earnings.</p></div>';
+    }).catch(errorView);
+  }
+
   function viewSettings() {
     setTitle('Settings');
     loading();
@@ -995,6 +1021,7 @@
     payments: { title: 'Payments', icon: 'card', sep: 'Money', view: viewPayments, roles: ['operator'] },
     vouchers: { title: 'Vouchers', icon: 'gift', view: viewVouchers, roles: ['operator'] },
     payouts: { title: 'Payouts', icon: 'dollar', view: viewPayouts, roles: ['operator'] },
+    statement: { title: 'Statement', icon: 'filetext', view: viewStatement, roles: ['operator'] },
     agent: { title: 'Overview', icon: 'grid', sep: 'Dashboard', view: viewAgent, roles: ['agent'] },
     'agent-payouts': { title: 'My payouts', icon: 'dollar', sep: 'Money', view: viewAgentPayouts, roles: ['agent'] },
     'admin-kyc': { title: 'KYC queue', icon: 'usercheck', sep: 'Platform', view: viewAdminKYC, roles: ['admin', 'super_admin'] },

@@ -166,6 +166,23 @@ func TestPayWebhookSessionFlow(t *testing.T) {
 		t.Errorf("commissions after duplicate webhook: got %d, want 1", n)
 	}
 
+	// --- 4b. Second success webhook with a DIFFERENT transactionReference for
+	// the same external reference (gateway retry / forged duplicate) must not
+	// double-credit. Observed live 2026-07-19: sandbox webhook + test webhook
+	// each created a confirmed payment and commission before this guard.
+	fresh := webhookBody(paymentID, "itest-zref-retry")
+	code = postWebhook(t, app.URL, fresh, signHMAC(fresh, webhookSecret))
+	if code != http.StatusOK {
+		t.Fatalf("fresh-ref duplicate webhook: got %d, want 200", code)
+	}
+	time.Sleep(1500 * time.Millisecond) // would-be async session write
+	if n := count(t, ctx, db, `SELECT COUNT(*) FROM payments WHERE customer_phone=$1 AND status='confirmed'`, customerPhone); n != 1 {
+		t.Errorf("payments after fresh-ref duplicate: got %d, want 1", n)
+	}
+	if n := count(t, ctx, db, `SELECT COUNT(*) FROM commissions`); n != 1 {
+		t.Errorf("commissions after fresh-ref duplicate: got %d, want 1", n)
+	}
+
 	// --- 5. Bad signature is rejected ---
 	bad := webhookBody("someone-else", "itest-zref-2")
 	code = postWebhook(t, app.URL, bad, signHMAC(bad, "wrong-secret"))

@@ -276,6 +276,15 @@ func (h *Handler) ZengapayWebhook(w http.ResponseWriter, r *http.Request) {
 
 	switch classifyZengapayEvent(txn.TransactionStatus, raw.Event) {
 	case "success":
+		// One confirmed payment per external reference: a gateway retry (or a
+		// forged duplicate) arriving with a *different* transactionReference
+		// passes the dedup above but must not credit twice. Claimed only on
+		// success so an earlier "failed" webhook doesn't block the real one.
+		extKey := "webhook:zengapay:extref:" + paymentID
+		if set, _ := h.cache.SetNX(ctx, extKey, "1", 24*time.Hour).Result(); !set {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		h.cache.HSet(ctx, pendingKey, "status", "successful", "zengapay_ref", txn.TransactionReference)
 		go h.createSessionAfterPayment(paymentID, txn.Phone)
 	case "failed":
@@ -362,12 +371,14 @@ func (h *Handler) createSessionAfterPayment(paymentID, phone string) {
 	h.db.Exec(ctx, `INSERT INTO radreply (username, attribute, op, value) VALUES ($1, 'WISPr-Bandwidth-Max-Up', ':=', $2)`, username, upStr)
 
 	// 5. Persist the confirmed mobile-money payment for audit/reporting (previously Redis-only).
-	// RETURNING id gives us the row actually written — on a duplicate webhook the ON CONFLICT
-	// suppresses the insert and returns no rows, which correctly suppresses the commission too.
+	// RETURNING id gives us the row actually written — no row means a duplicate
+	// (same zengapay_ref via ON CONFLICT, or same portal payment already
+	// confirmed under a different ref via NOT EXISTS — the DB backstop for the
+	// webhook's Redis extref claim), which correctly suppresses the commission too.
 	var confirmedPaymentID string
 	err = h.db.QueryRow(ctx, `
 		INSERT INTO payments (id, location_id, plan_id, customer_phone, amount_ugx, method, status, zengapay_ref, initiated_at, confirmed_at, metadata)
-		VALUES (
+		SELECT
 			$1,
 			(SELECT id FROM locations WHERE portal_slug = $2 LIMIT 1),
 			COALESCE(
@@ -376,6 +387,9 @@ func (h *Handler) createSessionAfterPayment(paymentID, phone string) {
 			),
 			$5, $6, 'mobile_money', 'confirmed', NULLIF($7, ''), NOW(), NOW(),
 			jsonb_build_object('payment_id', $8::text, 'session_id', $9::text)
+		WHERE NOT EXISTS (
+			SELECT 1 FROM payments
+			WHERE metadata->>'payment_id' = $8::text AND status = 'confirmed'
 		)
 		ON CONFLICT (zengapay_ref) DO NOTHING
 		RETURNING id

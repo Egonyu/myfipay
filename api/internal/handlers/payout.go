@@ -290,3 +290,79 @@ func (h *Handler) MarkOperatorPayoutPaid(w http.ResponseWriter, r *http.Request)
 	}
 	respond(w, http.StatusOK, map[string]string{"status": "paid"})
 }
+
+// OperatorStatement returns a month-by-month earnings statement plus the fee
+// schedule — the operator-facing disclosure of what the platform takes and
+// what they keep. Cash sales carry no platform fee (collected directly by the
+// operator); agent commissions are funded from the platform's cut, never
+// deducted from the operator.
+func (h *Handler) OperatorStatement(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetClaims(r)
+	ctx := context.Background()
+
+	gross, commission, _, available, rate := h.tenantBalance(ctx, claims.TenantID)
+
+	var paidOut int
+	h.db.QueryRow(ctx, `
+		SELECT COALESCE(SUM(amount_ugx), 0) FROM payouts
+		WHERE tenant_id = $1 AND status = 'paid'
+	`, claims.TenantID).Scan(&paidOut)
+
+	type monthRow struct {
+		Month          string `json:"month"`
+		MobileMoneyUGX int    `json:"mobile_money_ugx"`
+		PlatformFeeUGX int    `json:"platform_fee_ugx"`
+		NetEarnedUGX   int    `json:"net_earned_ugx"`
+		CashUGX        int    `json:"cash_ugx"`
+		Payments       int    `json:"payments"`
+		PayoutsPaidUGX int    `json:"payouts_paid_ugx"`
+	}
+	months := []monthRow{}
+
+	rows, err := h.db.Query(ctx, `
+		WITH pay AS (
+			SELECT to_char(pm.confirmed_at, 'YYYY-MM') AS month,
+			       COALESCE(SUM(pm.amount_ugx) FILTER (WHERE pm.method = 'mobile_money'), 0) AS mm,
+			       COALESCE(SUM(pm.amount_ugx) FILTER (WHERE pm.method <> 'mobile_money'), 0) AS cash,
+			       COUNT(*) AS payments
+			FROM payments pm JOIN locations l ON pm.location_id = l.id
+			WHERE l.tenant_id = $1 AND pm.status = 'confirmed' AND pm.confirmed_at IS NOT NULL
+			GROUP BY 1
+		), po AS (
+			SELECT to_char(paid_at, 'YYYY-MM') AS month, SUM(amount_ugx) AS paid
+			FROM payouts
+			WHERE tenant_id = $1 AND status = 'paid' AND paid_at IS NOT NULL
+			GROUP BY 1
+		)
+		SELECT COALESCE(pay.month, po.month),
+		       COALESCE(pay.mm, 0), COALESCE(pay.cash, 0), COALESCE(pay.payments, 0),
+		       COALESCE(po.paid, 0)
+		FROM pay FULL OUTER JOIN po ON pay.month = po.month
+		ORDER BY 1 DESC
+		LIMIT 12
+	`, claims.TenantID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "DB_ERROR", "query failed")
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var m monthRow
+		if err := rows.Scan(&m.Month, &m.MobileMoneyUGX, &m.CashUGX, &m.Payments, &m.PayoutsPaidUGX); err != nil {
+			continue
+		}
+		m.PlatformFeeUGX = platformCommission(m.MobileMoneyUGX, rate)
+		m.NetEarnedUGX = m.MobileMoneyUGX - m.PlatformFeeUGX
+		months = append(months, m)
+	}
+
+	respond(w, http.StatusOK, map[string]any{
+		"fee_rate":               rate,
+		"agent_rate":             agentCommissionRate,
+		"gross_mobile_money_ugx": gross,
+		"commission_ugx":         commission,
+		"available_ugx":          available,
+		"paid_out_ugx":           paidOut,
+		"months":                 months,
+	})
+}
