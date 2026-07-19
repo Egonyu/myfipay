@@ -92,7 +92,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 |---|---|---|---|
 | 1 | ~~Push repo to GitHub~~ ✅ | Done | Verified 2026-07-18: `origin/main` matches local HEAD (`89df9e6`); git history confirmed clean of RADIUS secret |
 | 2 | ~~Recover or rebuild operator dashboard~~ ✅ | Done | Rebuilt 2026-07-18 as static app at `/dashboard/`: operator (overview+chart, sessions grant/extend/terminate, plans CRUD, locations+branding, payments, vouchers+print, payouts, settings), agent (invite/operators/commissions/payouts), admin (KYC queue, tenants, revenue, both payout queues, agents) |
-| 3 | MikroTik live test | Daniel + Claude | In progress 2026-07-19: CHR-on-DO droplet being rebuilt (first attempt at 170.64.169.239 died mid-conversion). Runbook: `docs/MIKROTIK_CHR_TEST.md` — Daniel rebuilds (Phase 0), then registration via dashboard + VPC hotspot-client test |
+| 3 | ~~MikroTik live test~~ ✅ | Done | **Verified 2026-07-19 on real RouterOS 7.16.2** (CHR at 170.64.169.239, kept as lab rig): self-serve registration → cron opened UFW+FreeRADIUS in 40s → wizard script + login.html → captive-portal intercept → branded redirect (mac/ip/link-login-only substituted) → walled garden → **Access-Accept** → Session-Timeout + rate-limit queue applied → accounting Start/Stop rows (after schema fix, migration 006). Remaining at pilot install only: physical router + real phone over WiFi (protocol path identical) |
 | 4 | ZengaPay production account | Daniel | Then: live token + HMAC secret in `.env` |
 | 5 | ~~Domain + SSL~~ ✅ | Done | `https://myfipay.com` live 2026-07-18 (Cloudflare proxy + certbot + UFW) |
 | 6 | ~~Landing page + signup/login UI~~ ✅ | Done | `site/` live 2026-07-18; signup→KYC gate→login→stats verified e2e over HTTPS. Account page is a stub until dashboard (#2) lands |
@@ -123,6 +123,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 - [ ] SMS notifications (Africa's Talking): session start / expiry warning / top-up
 - [ ] ZengaPay disbursement API on payout approval (replaces manual mark-paid)
 - [ ] Refund handling
+- [ ] RADIUS CoA/Disconnect on session terminate — dashboard terminate kills authorization but the live hotspot session rides out its clock (verified on CHR 2026-07-19); routers already accept incoming RADIUS (wizard sets `/radius incoming accept=yes`, port 3799)
 - [ ] Session renewal from portal (extend without disconnect — API exists, portal UI doesn't)
 - [ ] Multi-device detection (same phone, two devices)
 - [ ] Wholesale voucher purchase for agents (5% below retail — BUSINESS_MODEL §Tertiary)
@@ -170,6 +171,9 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | Live: login lockout — 10 failures on one account → 11th attempt 429 (Retry-After 900); test keys cleaned | ✅ | 2026-07-19 |
 | Live: webhook endpoint unaffected with `ZENGAPAY_WEBHOOK_IPS` empty (no 403) | ✅ | 2026-07-19 |
 | Deploy `a2e5c14` via CI-pulled image: /health + site + /dashboard/ + /login all 200 | ✅ | 2026-07-19 |
+| **MikroTik live e2e (CHR, RouterOS 7.16.2)**: dashboard-style registration → UFW+FreeRADIUS client in 40s → hotspot intercept 302 → branded login.html (vars substituted) → walled garden to portal (200 via Cloudflare) → grant via API → hotspot login **Access-Accept** (radpostauth nasip=CHR) → dynamic queue 2048k/1024k + 59m timeout → authenticated browsing OK | ✅ | 2026-07-19 |
+| radacct accounting Start (open row) + Stop (closed, terminate cause) from real NAS after migration 006 | ✅ | 2026-07-19 |
+| Dashboard terminate on live session: radcheck removed instantly, hotspot session persists (no CoA) — recorded as P2 | ✅ | 2026-07-19 |
 
 ---
 
@@ -223,6 +227,14 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-19 (afternoon) — MikroTik live test PASSED on rebuilt CHR
+- Daniel rebuilt the CHR droplet (170.64.169.239, RouterOS 7.16.2); networking had to be set via DO console (no DHCP on DO — this is what killed attempt #1). Claude drove everything after via SSH
+- **P0.5 #3 done.** Full journey verified against real RouterOS: register router (temp operator `chr-test`, product API path) → radius-sync opened UFW + loaded FreeRADIUS client in 40s → wizard script applied → hotspot (VXLAN lab: droplets are in different VPCs, so an L2 VXLAN tunnel over public makes this server a hotspot client) → intercept → branded login.html → walled garden → grant → **Access-Accept** → queue/timeout applied → real browsing; dashboard device status `online:true`
+- **Bug found+fixed (migration `006`)**: radacct schema diverged from stock FreeRADIUS 3.2 — missing IPv6/connectinfo columns + 7 over-strict NOT NULLs made **every accounting packet fail** (invisible to radtest, which never sends accounting). Applied live; Start/Stop rows now land
+- Recorded limitation → P2: no CoA/Disconnect on terminate (session rides out clock after auth revoked)
+- CHR hardened: unused services disabled, SSH/Winbox restricted to mgmt address-list (server + Daniel's IPs); DO console is the recovery path. CHR kept as permanent lab rig with the `chr-test` tenant/device/plan and the vx1 tunnel (UFW rule `chr-vxlan-test`)
+- M8 pilot now blocked only on: ZengaPay prod account (#4) + founder dry-run (#8)
 
 ### 2026-07-19 (midday) — P0 closed; P1 security batch shipped (a2e5c14)
 - **Founder SSH timeout diagnosed:** `170.64.169.239` is the separate **MikroTik CHR test droplet** (not this server, which is `170.64.177.20`) — the CHR install died mid-conversion; Daniel is rebuilding it. Rebuild + live-test runbook written: `docs/MIKROTIK_CHR_TEST.md`. This server's SSH verified clean either way (sshd active, ufw 22 open, no fail2ban bans on his IPs)
