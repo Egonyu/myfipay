@@ -25,8 +25,12 @@ worked once; a unit test proves it still works after every future change.
 exist.
 
 ### 3. Prod is deployed to, never live-edited
-The web root and API on the droplet change via `git push` → deploy step, not by
-editing files in place. Verification happens against local/ephemeral
+The web root and API on the droplet change via `scripts/deploy.sh` (since
+2026-07-19), not by editing files in place. The script refuses a dirty tree,
+exports committed `site/` to `/var/www/myfipay-site/releases/<sha>` behind a
+`current` symlink nginx serves (the repo working tree is no longer the web
+root), rebuilds the API image when `api/` changed, and health-checks site +
+API before reporting success. Roll back by repointing the symlink. Verification happens against local/ephemeral
 containers first; prod verification is a final check, not the first one.
 Temp test data in the prod DB is a last resort, cleaned in the same session,
 and noted in the tracker.
@@ -91,9 +95,9 @@ Tracked so we close them deliberately; order = priority.
 
 | # | Gap | Standard violated | Status |
 |---|---|---|---|
-| 1 | Zero automated tests (money paths first) | 1, 2 | 🔨 in progress 2026-07-19 |
-| 2 | No CI | 2 | 🔨 in progress 2026-07-19 |
-| 3 | Prod is live-edited; no deploy step; verify-in-prod | 3 | ❌ open |
+| 1 | Zero automated tests (money paths first) | 1, 2 | ✅ closed 2026-07-19 — 9 money-path unit tests green |
+| 2 | No CI | 2 | ✅ closed 2026-07-19 — Actions run on `e6072b6` succeeded |
+| 3 | Prod is live-edited; no deploy step; verify-in-prod | 3 | ✅ closed 2026-07-19 — `scripts/deploy.sh`, nginx serves release export; live-edit verified inert |
 | 4 | No uptime/error monitoring | 5 | ❌ open |
 | 5 | CORS wildcard+credentials, no login rate limit, no JWT revocation, same-disk backups | 4 | ❌ open (TRACKER §2) |
 | 6 | Dashboard XSS audit (esc() discipline never reviewed as a whole) | 9 | ❌ open |
