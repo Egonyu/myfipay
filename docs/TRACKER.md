@@ -2,7 +2,7 @@
 
 **Repo:** `git@github.com:Egonyu/myfipay.git` (branch `main`)
 **Server:** 170.64.177.20 (DigitalOcean Sydney — dev/staging) · **Prod target:** DO Nairobi (BLR1)
-**Last updated:** 2026-07-18
+**Last updated:** 2026-07-19
 
 > **Rules for this tracker:** update it in the same session as the work; never mark an item ✅ unless it is verified on this server (code present, running, or query-confirmed). Items built elsewhere get ⚠️ until they land here. Security items are never "later" once real money flows.
 
@@ -15,7 +15,7 @@
 | M0 Decisions + architecture | ✅ | `docs/` complete |
 | M1 Core API + portal + RADIUS | ✅ | Verified end-to-end 2026-06-25 |
 | M2 ZengaPay payment cycle | ✅ sandbox | Prod account blocked (shared with TesoTunes) |
-| M3 Operator dashboard MVP | ✅ 2026-07-18 | **Rebuilt** as static SPA at `site/dashboard/` (vanilla JS + cookie JWT, no Node needed on server) — live at `myfipay.com/dashboard/`, all views smoke-tested against the live API. Sandbox Next.js code abandoned; root `dashboard/` dir unused |
+| M3 Operator dashboard MVP | ✅ 2026-07-18 | **Rebuilt** as static SPA at `site/dashboard/` (vanilla JS + cookie JWT, no Node needed on server) — live at `myfipay.com/dashboard/`, all views smoke-tested against the live API. Sandbox Next.js code abandoned; root `dashboard/` dir unused. Restyled 2026-07-19 to "Modernize"-style light theme (inline SVG icons, no external assets) |
 | M4 Vouchers + cash sessions | ✅ | Batches, redemption, PDF/QR, cash grant — all in API |
 | M4.5 Agent network (API) | ✅ 2026-07-18 | Full API + DB live; UI pending |
 | M5 SSL + domain (dev server) | ✅ 2026-07-18 | `https://myfipay.com` live: Cloudflare-proxied A records, certbot SSL, nginx serving `site/` + proxying `/api/`; HTTP→HTTPS redirect on domain; raw-IP HTTP kept for NAS portal + webhooks. Nairobi prod droplet still P3 |
@@ -203,7 +203,11 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 
 ## 8. Session Log (newest first)
 
-### 2026-07-18 (late night, cont.) — Router self-onboarding wizard live (P0 #7)
+### 2026-07-19 — Dashboard visual restyle finished ("Modernize" theme)
+- Picked up yesterday's uncommitted restyle of the dashboard toward the Modernize admin-template look (reference mockups in `dashboard/template/`, gitignored — not committed): CSS token remap scoped to `.dash-body` (blue `#5d87ff` brand, soft shadows, pastel accent palette; public site keeps green), stat tiles with pastel icon chips, welcome banner, card shadows, restyled tables/pills/modals — that part was already done and live
+- Finished the two remaining pieces: sidebar nav now renders per-route inline SVG feather icons with section labels (Dashboard/Manage/Money/Account; admin regrouped Platform/Money); sidebar footer now avatar-initial + name + role chip. All icons inline SVG — zero external assets, still no build step
+- Cache-busters bumped (`dashboard.css?v=3`, `dashboard.js?v=4`); `node --check` (via throwaway node:alpine container) passes; live URLs verified 200 serving the new code
+- No API/backend changes; committed site + tracker
 - Built + deployed across two sessions (context break mid-way; second session verified everything live rather than re-building): migration `005` (`nas` table + `radpostauth.nasipaddress`), `handlers/device.go` (CRUD + MikroTik script + connection test, tenant-scoped, platform-wide IP uniqueness), dashboard **Routers** view (add/edit/remove, setup modal with copy-paste RouterOS script + `login.html` download, connection test), `scripts/radius-sync.sh` (cron every minute: UFW per-router allow rules tagged `myfibase-nas` + FreeRADIUS restart, hash-gated no-op)
 - Host config (mirrored into `freeradius/` in repo, secrets scrubbed, + new `freeradius/README.md`): `clients.conf` reduced to localhost-only — **the `0.0.0.0/0` shared-secret client is gone**; `mods-enabled/sql` `read_clients=yes` from `nas` table; `queries.conf` postauth patched to record packet source IP
 - Portal: accepts MikroTik `$(link-login-only)` as `?login=` (scheme-validated) and, after payment/voucher, logs the device into the hotspot via RADIUS instead of bouncing to google.com; voucher redemption now sends phone+MAC

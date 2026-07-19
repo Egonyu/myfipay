@@ -80,6 +80,40 @@
 
   function el(id) { return document.getElementById(id); }
 
+  // Inline feather-style icons (stroke, 24 viewBox) — no external assets.
+  var ICONS = {
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>',
+    activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+    pin: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+    router: '<line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/>',
+    card: '<rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+    gift: '<polyline points="20 12 20 22 4 22 4 12"/><rect x="2" y="7" width="20" height="5"/><line x1="12" y1="22" x2="12" y2="7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>',
+    dollar: '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
+    usercheck: '<path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/>',
+    users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    barchart: '<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>',
+    briefcase: '<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>',
+    sliders: '<line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>',
+    wifi: '<path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>',
+    download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+    globe: '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'
+  };
+  function ic(name, size) {
+    size = size || 20;
+    return '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" ' +
+      'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      (ICONS[name] || ICONS.grid) + '</svg>';
+  }
+
+  // Pastel stat tile — variants assigned per view in fixed order (blue, cyan,
+  // teal, amber, violet, coral), never cycled at runtime.
+  function tile(variant, icon, label, valueHTML, sub) {
+    return '<div class="tile t-' + variant + '"><span class="tile-ic">' + ic(icon, 22) + '</span>' +
+      '<div class="label">' + esc(label) + '</div><div class="value">' + valueHTML + '</div>' +
+      (sub ? '<div class="sub">' + esc(sub) + '</div>' : '') + '</div>';
+  }
+
   function content() { return el('content'); }
 
   function setTitle(t, actionsHTML) {
@@ -175,13 +209,13 @@
       var label = new Date(p.day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
       return '<rect x="' + (x + 1).toFixed(1) + '" y="' + (H - padB - h).toFixed(1) +
         '" width="' + Math.max(1, bw - 2).toFixed(1) + '" height="' + h.toFixed(1) +
-        '" rx="2" fill="#0b7a4b"><title>' + esc(label) + ': ' + ugx(p.revenue) + '</title></rect>';
+        '" rx="3" fill="#5d87ff"><title>' + esc(label) + ': ' + ugx(p.revenue) + '</title></rect>';
     }).join('');
     var first = new Date(points[0].day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     var last = new Date(points[points.length - 1].day).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     return '<div class="chart-box"><svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + bars +
-      '<text x="' + padL + '" y="' + (H - 6) + '" font-size="11" fill="#5b6b62">' + esc(first) + '</text>' +
-      '<text x="' + (W - padL) + '" y="' + (H - 6) + '" font-size="11" fill="#5b6b62" text-anchor="end">' + esc(last) + '</text>' +
+      '<text x="' + padL + '" y="' + (H - 6) + '" font-size="11" fill="#5a6a85">' + esc(first) + '</text>' +
+      '<text x="' + (W - padL) + '" y="' + (H - 6) + '" font-size="11" fill="#5a6a85" text-anchor="end">' + esc(last) + '</text>' +
       '</svg></div>';
   }
 
@@ -192,13 +226,18 @@
     loading();
     Promise.all([api('/api/dashboard/stats'), api('/api/dashboard/revenue-chart')]).then(function (r) {
       var s = r[0], chart = r[1];
+      var firstName = ((me && me.name) || '').split(' ')[0];
       content().innerHTML =
+        '<div class="welcome-banner"><div>' +
+        '<h2>Welcome back' + (firstName ? ', ' + esc(firstName) : '') + '!</h2>' +
+        '<p>Here is how your WiFi business is doing today.</p></div>' +
+        '<div class="wb-figure">📶</div></div>' +
         '<div class="tile-grid">' +
-        '<div class="tile"><div class="label">Online now</div><div class="value">' + s.active_sessions + '</div></div>' +
-        '<div class="tile"><div class="label">Sessions today</div><div class="value">' + s.today_sessions + '</div></div>' +
-        '<div class="tile"><div class="label">Revenue today</div><div class="value">' + ugx(s.today_revenue) + '</div></div>' +
-        '<div class="tile"><div class="label">Data today</div><div class="value">' + bytesFmt(s.today_bandwidth_bytes) + '</div></div>' +
-        '<div class="tile"><div class="label">Locations</div><div class="value">' + s.total_locations + '</div></div>' +
+        tile('blue', 'wifi', 'Online now', s.active_sessions) +
+        tile('cyan', 'activity', 'Sessions today', s.today_sessions) +
+        tile('teal', 'dollar', 'Revenue today', ugx(s.today_revenue)) +
+        tile('amber', 'download', 'Data today', bytesFmt(s.today_bandwidth_bytes)) +
+        tile('violet', 'pin', 'Locations', s.total_locations) +
         '</div>' +
         '<div class="panel"><h2>Revenue — last 30 days</h2>' + revenueChart(chart) + '</div>';
     }).catch(errorView);
@@ -633,10 +672,10 @@
       });
       content().innerHTML =
         '<div class="tile-grid">' +
-        '<div class="tile"><div class="label">Available to withdraw</div><div class="value">' + ugx(bal.available_ugx) + '</div><div class="sub">min ' + ugx(bal.min_payout_ugx) + '</div></div>' +
-        '<div class="tile"><div class="label">Mobile-money collected</div><div class="value">' + ugx(bal.gross_mobile_money_ugx) + '</div></div>' +
-        '<div class="tile"><div class="label">Platform fee (' + Math.round(bal.commission_rate * 100) + '%)</div><div class="value">' + ugx(bal.commission_ugx) + '</div></div>' +
-        '<div class="tile"><div class="label">Already requested</div><div class="value">' + ugx(bal.already_requested_ugx) + '</div></div>' +
+        tile('blue', 'dollar', 'Available to withdraw', ugx(bal.available_ugx), 'min ' + ugx(bal.min_payout_ugx)) +
+        tile('cyan', 'card', 'Mobile-money collected', ugx(bal.gross_mobile_money_ugx)) +
+        tile('teal', 'barchart', 'Platform fee (' + Math.round(bal.commission_rate * 100) + '%)', ugx(bal.commission_ugx)) +
+        tile('amber', 'activity', 'Already requested', ugx(bal.already_requested_ugx)) +
         '</div>' +
         '<div class="panel"><h2>Payout history</h2>' +
         table(['Requested', 'Amount', 'To', 'Status', 'Reference / reason', 'Paid'], rows, 'No payout requests yet.') + '</div>';
@@ -717,10 +756,10 @@
         });
         content().innerHTML =
           '<div class="tile-grid">' +
-          '<div class="tile"><div class="label">Operators referred</div><div class="value">' + d.operator_count + '</div></div>' +
-          '<div class="tile"><div class="label">Total earned</div><div class="value">' + ugx(d.total_earned_ugx) + '</div></div>' +
-          '<div class="tile"><div class="label">Available balance</div><div class="value">' + ugx(d.available_balance) + '</div></div>' +
-          '<div class="tile"><div class="label">Pending payouts</div><div class="value">' + d.pending_payouts + '</div></div>' +
+          tile('blue', 'users', 'Operators referred', d.operator_count) +
+          tile('cyan', 'barchart', 'Total earned', ugx(d.total_earned_ugx)) +
+          tile('teal', 'dollar', 'Available balance', ugx(d.available_balance)) +
+          tile('amber', 'activity', 'Pending payouts', d.pending_payouts) +
           '</div>' +
           '<div class="panel"><h2>Your invite link</h2>' +
           '<p class="hint" style="margin-bottom:10px">Operators who sign up through this link are yours — you earn 3% of every mobile-money payment they collect.</p>' +
@@ -748,7 +787,7 @@
           '</td><td>' + pill(p.status) + '</td><td>' + (p.processed_at ? dt(p.processed_at) : '—') + '</td></tr>';
       });
       content().innerHTML =
-        '<div class="tile-grid"><div class="tile"><div class="label">Available balance</div><div class="value">' + ugx(d.available_balance) + '</div></div></div>' +
+        '<div class="tile-grid">' + tile('blue', 'dollar', 'Available balance', ugx(d.available_balance)) + '</div>' +
         '<div class="panel"><h2>Payout history</h2>' + table(['Requested', 'Amount', 'To', 'Status', 'Processed'], rows, 'No payout requests yet.') + '</div>';
       el('req-payout-btn').addEventListener('click', function () {
         openModal('Request a payout',
@@ -835,10 +874,10 @@
       });
       content().innerHTML =
         '<div class="tile-grid">' +
-        '<div class="tile"><div class="label">Total revenue</div><div class="value">' + ugx(r.total_revenue) + '</div></div>' +
-        '<div class="tile"><div class="label">Revenue today</div><div class="value">' + ugx(r.today_revenue) + '</div></div>' +
-        '<div class="tile"><div class="label">Total sessions</div><div class="value">' + r.total_sessions + '</div></div>' +
-        '<div class="tile"><div class="label">Sessions today</div><div class="value">' + r.today_sessions + '</div></div>' +
+        tile('blue', 'barchart', 'Total revenue', ugx(r.total_revenue)) +
+        tile('cyan', 'dollar', 'Revenue today', ugx(r.today_revenue)) +
+        tile('teal', 'activity', 'Total sessions', r.total_sessions) +
+        tile('amber', 'wifi', 'Sessions today', r.today_sessions) +
         '</div>' +
         '<div class="panel"><h2>Revenue — last 30 days</h2>' + revenueChart(r.chart) + '</div>' +
         '<div class="panel"><h2>By operator</h2>' + table(['Operator', 'Status', 'Sessions', 'Revenue'], rows, 'No revenue yet.') + '</div>';
@@ -948,22 +987,22 @@
   // ── routing ────────────────────────────────────────────────────────────────
 
   var routes = {
-    overview: { title: 'Overview', view: viewOverview, roles: ['operator'] },
-    sessions: { title: 'Sessions', view: viewSessions, roles: ['operator'] },
-    plans: { title: 'Plans', view: viewPlans, roles: ['operator'] },
-    locations: { title: 'Locations', view: viewLocations, roles: ['operator'] },
-    routers: { title: 'Routers', view: viewRouters, roles: ['operator'] },
-    payments: { title: 'Payments', view: viewPayments, roles: ['operator'] },
-    vouchers: { title: 'Vouchers', view: viewVouchers, roles: ['operator'] },
-    payouts: { title: 'Payouts', view: viewPayouts, roles: ['operator'] },
-    agent: { title: 'Overview', view: viewAgent, roles: ['agent'] },
-    'agent-payouts': { title: 'My payouts', view: viewAgentPayouts, roles: ['agent'] },
-    'admin-kyc': { title: 'KYC queue', view: viewAdminKYC, roles: ['admin', 'super_admin'] },
-    'admin-tenants': { title: 'Operators', view: viewAdminTenants, roles: ['admin', 'super_admin'] },
-    'admin-revenue': { title: 'Revenue', view: viewAdminRevenue, roles: ['admin', 'super_admin'] },
-    'admin-payouts': { title: 'Operator payouts', view: viewAdminPayouts, roles: ['admin', 'super_admin'] },
-    'admin-agents': { title: 'Agents', view: viewAdminAgents, roles: ['admin', 'super_admin'] },
-    settings: { title: 'Settings', view: viewSettings, roles: ['operator', 'agent', 'admin', 'super_admin'] }
+    overview: { title: 'Overview', icon: 'grid', sep: 'Dashboard', view: viewOverview, roles: ['operator'] },
+    sessions: { title: 'Sessions', icon: 'activity', sep: 'Manage', view: viewSessions, roles: ['operator'] },
+    plans: { title: 'Plans', icon: 'tag', view: viewPlans, roles: ['operator'] },
+    locations: { title: 'Locations', icon: 'pin', view: viewLocations, roles: ['operator'] },
+    routers: { title: 'Routers', icon: 'router', view: viewRouters, roles: ['operator'] },
+    payments: { title: 'Payments', icon: 'card', sep: 'Money', view: viewPayments, roles: ['operator'] },
+    vouchers: { title: 'Vouchers', icon: 'gift', view: viewVouchers, roles: ['operator'] },
+    payouts: { title: 'Payouts', icon: 'dollar', view: viewPayouts, roles: ['operator'] },
+    agent: { title: 'Overview', icon: 'grid', sep: 'Dashboard', view: viewAgent, roles: ['agent'] },
+    'agent-payouts': { title: 'My payouts', icon: 'dollar', sep: 'Money', view: viewAgentPayouts, roles: ['agent'] },
+    'admin-kyc': { title: 'KYC queue', icon: 'usercheck', sep: 'Platform', view: viewAdminKYC, roles: ['admin', 'super_admin'] },
+    'admin-tenants': { title: 'Operators', icon: 'briefcase', view: viewAdminTenants, roles: ['admin', 'super_admin'] },
+    'admin-agents': { title: 'Agents', icon: 'users', view: viewAdminAgents, roles: ['admin', 'super_admin'] },
+    'admin-revenue': { title: 'Revenue', icon: 'barchart', sep: 'Money', view: viewAdminRevenue, roles: ['admin', 'super_admin'] },
+    'admin-payouts': { title: 'Operator payouts', icon: 'dollar', view: viewAdminPayouts, roles: ['admin', 'super_admin'] },
+    settings: { title: 'Settings', icon: 'sliders', sep: 'Account', view: viewSettings, roles: ['operator', 'agent', 'admin', 'super_admin'] }
   };
 
   function defaultRoute() {
@@ -984,7 +1023,10 @@
       return routes[name].roles.indexOf(me.role) !== -1;
     });
     el('dash-nav').innerHTML = items.map(function (name) {
-      return '<a href="#/' + name + '" data-route="' + name + '">' + esc(routes[name].title) + '</a>';
+      var r = routes[name];
+      return (r.sep ? '<div class="nav-sep">' + esc(r.sep) + '</div>' : '') +
+        '<a href="#/' + name + '" data-route="' + name + '">' + ic(r.icon, 18) +
+        '<span>' + esc(r.title) + '</span></a>';
     }).join('');
     el('dash-nav').addEventListener('click', function () {
       el('sidebar').classList.remove('open');
@@ -1004,7 +1046,11 @@
 
   api('/api/auth/me').then(function (u) {
     me = u;
-    el('dash-user').textContent = u.name || u.email;
+    var display = u.name || u.email;
+    el('dash-user').innerHTML =
+      '<span class="dash-user-avatar">' + esc(display.charAt(0).toUpperCase()) + '</span>' +
+      '<span class="dash-user-meta"><span class="u-name" title="' + esc(display) + '">' + esc(display) + '</span>' +
+      '<span class="u-role">' + esc((u.role || '').replace(/_/g, ' ')) + '</span></span>';
     buildNav();
     el('dash-layout').style.display = '';
     if (!location.hash) location.hash = '#/' + defaultRoute();

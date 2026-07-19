@@ -5,4 +5,5 @@ edge-agent/bin/
 api/bin/
 dashboard/.next/
 dashboard/node_modules/
+dashboard/template/
 .claude/settings.local.json
