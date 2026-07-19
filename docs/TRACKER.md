@@ -70,7 +70,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | 5. Connect router (**activation**) | ✅ **Closed 2026-07-18** — Routers view in dashboard: register device → per-device RADIUS secret → generated MikroTik script + login.html download → connection test. `radius-sync.sh` cron syncs UFW + FreeRADIUS from the `nas` table every minute | Remaining: verify on a real MikroTik (P0 #3) |
 | 6. First sale | Pay → webhook → WiFi grant verified end-to-end (sandbox) | ZengaPay prod blocked; no receipt to the WiFi buyer |
 | 7. Get paid | Payout request + admin queue APIs | No UI; disbursement is manual mark-paid; 8% platform fee disclosed nowhere except source code — no statement/fee breakdown for the operator |
-| 8. Ongoing trust | — | No support channel or help docs; no notifications of any kind |
+| 8. Ongoing trust | ✅ support minimum 2026-07-19: `/support` FAQ (12 operator questions) + WhatsApp line (+256 759 886 260), linked from landing + dashboard sidebar. Statement view discloses fees | Remaining: notifications of any kind (blocked on email/SMS infra) |
 
 **Litmus test (gates M8):** founder dry-run — Daniel signs up at myfipay.com as a normal operator and reaches a first paid WiFi session **without SSH-ing into the server**.
 
@@ -237,6 +237,11 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 - Operator **Statement** view: `GET /api/statement` (monthly MM gross / 8% fee / net / cash / payouts paid, all-time tiles) + dashboard view with published plain-language fee schedule — closes the "fee disclosed nowhere" trust gap from §3
 - Deployed `71429a9` via CI image; statement verified live against chr-test data (3,000→240→2,760); dashboard cache-busted to v=5
 - Support minimum (WhatsApp + FAQ) and email infra remain the next non-blocked items
+
+### 2026-07-19 (night) — Support/FAQ page live (94099e6)
+- `/support`: 12 operator-focused FAQs (setup, router connect, fees, payouts, paid-but-not-online troubleshooting, cash/vouchers, multi-location, outages, agents) + WhatsApp support line **+256 759 886 260** with prefilled message; linked from landing nav/footer and dashboard sidebar (Help section, v=6)
+- Deployed + verified live (200, links present). §3 journey row 8 (support) closed at pilot level — notifications still blocked on email/SMS infra
+- Next non-blocked: email infra (Daniel picks provider); Daniel-blocked: ZengaPay prod, founder dry-run
 
 ### 2026-07-19 (late) — Dashboard demo data + credentials; webhook idempotency gap found
 - Super-admin password reset (bcrypt can't be recovered; old one was never handed over) — verified via live login; given to Daniel out-of-band
