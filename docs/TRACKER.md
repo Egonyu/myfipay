@@ -125,6 +125,8 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 - [ ] ZengaPay disbursement API on payout approval (replaces manual mark-paid)
 - [ ] Refund handling
 - [x] ~~RADIUS CoA/Disconnect on session terminate~~ ✅ 2026-07-19 — server sends RFC 5176 Disconnect-Request to router:3799 on terminate; live CHR hotspot session killed (was: session rode out its clock after auth revoked). Dashboard warns when the router doesn't ACK the kick. Shipped `ba394a5`
+- [x] WireGuard management tunnel per router — **server side ✅ 2026-07-19** (`35ddeff`): wg0 on the droplet (10.77.0.1/16, :51820, UFW open — wg drops unauthenticated packets), migration 008, per-device keypair + tunnel IP lazily provisioned on Setup-script fetch, script gains a RouterOS-7 wg section, `wg-sync.sh` cron reconciles peers, heartbeat pings tunnel IP first (public fallback). **Router-side handshake unverified — needs the updated Setup script pasted into CHR (no CHR creds on this box)**
+- [ ] RADIUS over the management tunnel — the actual CGNAT enabler: nas row + walled garden + `radiusServerIP` use 10.77.0.1 for tunnel devices; needs UFW allow on wg0 + verified handshake first
 - [x] ~~Router health heartbeat~~ ✅ 2026-07-19 — `devices.online` was RADIUS-only, so a healthy router with no customers looked offline. Per-minute host cron `scripts/router-heartbeat.sh` (+ `/etc/cron.d/myfibase-router-heartbeat`, flock'd) pings each router; online = ping OR RADIUS ≤10m (migration 007 `last_ping`). Test panel now distinguishes "reachable, no login traffic" from "never connected". Ping targets the public IP — behind CGNAT this stays honest only after the WireGuard tunnel lands. Shipped `718f638`
 - [ ] Session renewal from portal (extend without disconnect — API exists, portal UI doesn't)
 - [ ] Multi-device detection (same phone, two devices)
@@ -183,6 +185,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | Deploy `718f638` via CI image: /health + site 200; authed `/api/devices` serves `last_ping`; live dashboard.js has new status texts | ✅ | 2026-07-19 |
 | Logrotate added for `/var/log/myfibase-*.log` (weekly/4, maxsize 10M) — cron logs were unrotated; dry-run picks up all three | ✅ | 2026-07-19 |
 | Per-router Clients view live (`8765865`): `/api/devices/{id}/clients` empty `[]` for CHR (no open sessions) and correct row for a labeled test radacct insert (deleted after); dashboard v=8 serving modal | ✅ | 2026-07-19 |
+| WG tunnel server side (`35ddeff`): CHR provisioned 10.77.0.10 on script fetch, idempotent (seq stayed 10); Go keypair pub == `wg pubkey` derivation; wg-sync put peer on wg0; heartbeat public-IP fallback kept `online:t` with tunnel unapplied | ✅ | 2026-07-19 |
 
 ---
 
