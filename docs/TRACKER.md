@@ -100,14 +100,14 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | 8 | Founder dry-run | Daniel | Sign up → first paid session with zero server access. Gates M8 (§3 litmus test) |
 
 ### P1 — before real money flows
-- [ ] **Webhook idempotency on `transactionExternalReference`** — found live 2026-07-19: dedup keys only on `transactionReference`, so two webhooks with different refs for the same externalRef (our payment ID) each create a confirmed payment + commission (observed when the real sandbox webhook and a manual test webhook both landed). Fix: reject/skip when a confirmed payment already exists for that externalRef; needs unit + integration coverage. Mitigated in prod by HMAC + IP allowlist, but ZengaPay retries with fresh refs would double-credit
+- [x] ~~Webhook idempotency on `transactionExternalReference`~~ ✅ fixed same day (`71429a9`): success webhooks claim the externalRef (Redis SetNX) + NOT EXISTS backstop in the payments insert; integration test reproduces the live double-credit and gates the CI image
 - [x] ~~Webhook IP allowlist middleware~~ ✅ 2026-07-19 (env-gated; activate with prod IPs)
 - [x] ~~Rotate RADIUS secret~~ ✅ resolved 2026-07-18 via `clients.conf` lockdown — the exposed shared secret's `0.0.0.0/0` client no longer exists; routers use per-device random secrets (— admin password rotated earlier same day)
 - [x] ~~CORS pinned origins~~ ✅ 2026-07-19
 - [ ] Offsite backups to DO Spaces
 - [ ] ~~NAS device registration flow~~ → folded into P0.5 #7 (router self-onboarding wizard)
 - [ ] Email delivery infra (SMTP/SES/Resend): KYC approve/reject notification, password reset, receipts — prerequisite for several P2 items and for the KYC flow's "you will be notified" promise
-- [ ] ToS + privacy policy + published fee schedule (8% platform, 3% agent) — trust/legal before real money
+- [ ] ToS + privacy policy — trust/legal before real money. ~~Published fee schedule~~ ✅ 2026-07-19: dashboard **Statement** view shows monthly gross/fee/net + plain-language fee schedule (8% mobile money only, cash free, agent 3% platform-funded) via `GET /api/statement`
 - [x] ~~Login attempt rate limiting~~ ✅ 2026-07-19
 - [ ] ~~Unit tests (money paths)~~ → promoted to P0-A
 - [ ] ~~Integration test pay→webhook→session~~ → promoted to P0-E
@@ -175,6 +175,8 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | **MikroTik live e2e (CHR, RouterOS 7.16.2)**: dashboard-style registration → UFW+FreeRADIUS client in 40s → hotspot intercept 302 → branded login.html (vars substituted) → walled garden to portal (200 via Cloudflare) → grant via API → hotspot login **Access-Accept** (radpostauth nasip=CHR) → dynamic queue 2048k/1024k + 59m timeout → authenticated browsing OK | ✅ | 2026-07-19 |
 | radacct accounting Start (open row) + Stop (closed, terminate cause) from real NAS after migration 006 | ✅ | 2026-07-19 |
 | Dashboard terminate on live session: radcheck removed instantly, hotspot session persists (no CoA) — recorded as P2 | ✅ | 2026-07-19 |
+| Webhook fresh-ref double-credit: integration test reproduces it, fix deployed (`71429a9`), suite green | ✅ | 2026-07-19 |
+| `/api/statement` live: 3,000 MM gross → 240 fee (8%) → 2,760 net; cash sales fee-free; dashboard v=5 serving Statement view | ✅ | 2026-07-19 |
 
 ---
 
@@ -228,6 +230,13 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-19 (evening) — Webhook double-credit fixed; operator Statement shipped (71429a9)
+- Strategic step-back with Daniel: agreed pilot-first (ZengaPay prod + dry-run) over feature pack; his feature list (router mgmt, analytics, float, agent POS, billing tiers, support…) triaged into the backlog by stage
+- Webhook idempotency fix (P1 → done): success events claim `transactionExternalReference` via SetNX; payments insert rewritten INSERT…SELECT with NOT EXISTS confirmed-payment backstop; new integration case replays the exact live failure (second webhook, fresh ref) and asserts single payment+commission — image push gated on it
+- Operator **Statement** view: `GET /api/statement` (monthly MM gross / 8% fee / net / cash / payouts paid, all-time tiles) + dashboard view with published plain-language fee schedule — closes the "fee disclosed nowhere" trust gap from §3
+- Deployed `71429a9` via CI image; statement verified live against chr-test data (3,000→240→2,760); dashboard cache-busted to v=5
+- Support minimum (WhatsApp + FAQ) and email infra remain the next non-blocked items
 
 ### 2026-07-19 (late) — Dashboard demo data + credentials; webhook idempotency gap found
 - Super-admin password reset (bcrypt can't be recovered; old one was never handed over) — verified via live login; given to Daniel out-of-band
