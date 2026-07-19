@@ -124,7 +124,8 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 - [ ] SMS notifications (Africa's Talking): session start / expiry warning / top-up
 - [ ] ZengaPay disbursement API on payout approval (replaces manual mark-paid)
 - [ ] Refund handling
-- [ ] RADIUS CoA/Disconnect on session terminate — dashboard terminate kills authorization but the live hotspot session rides out its clock (verified on CHR 2026-07-19); routers already accept incoming RADIUS (wizard sets `/radius incoming accept=yes`, port 3799)
+- [x] ~~RADIUS CoA/Disconnect on session terminate~~ ✅ 2026-07-19 — server sends RFC 5176 Disconnect-Request to router:3799 on terminate; live CHR hotspot session killed (was: session rode out its clock after auth revoked). Dashboard warns when the router doesn't ACK the kick. Shipped `ba394a5`
+- [x] ~~Router health heartbeat~~ ✅ 2026-07-19 — `devices.online` was RADIUS-only, so a healthy router with no customers looked offline. Per-minute host cron `scripts/router-heartbeat.sh` (+ `/etc/cron.d/myfibase-router-heartbeat`, flock'd) pings each router; online = ping OR RADIUS ≤10m (migration 007 `last_ping`). Test panel now distinguishes "reachable, no login traffic" from "never connected". Ping targets the public IP — behind CGNAT this stays honest only after the WireGuard tunnel lands. Shipped `718f638`
 - [ ] Session renewal from portal (extend without disconnect — API exists, portal UI doesn't)
 - [ ] Multi-device detection (same phone, two devices)
 - [ ] Wholesale voucher purchase for agents (5% below retail — BUSINESS_MODEL §Tertiary)
@@ -177,6 +178,10 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | Dashboard terminate on live session: radcheck removed instantly, hotspot session persists (no CoA) — recorded as P2 | ✅ | 2026-07-19 |
 | Webhook fresh-ref double-credit: integration test reproduces it, fix deployed (`71429a9`), suite green | ✅ | 2026-07-19 |
 | `/api/statement` live: 3,000 MM gross → 240 fee (8%) → 2,760 net; cash sales fee-free; dashboard v=5 serving Statement view | ✅ | 2026-07-19 |
+| RFC 5176 Disconnect on terminate: live CHR hotspot session killed (verified pre-commit `ba394a5`); code now in deployed API | ✅ | 2026-07-19 |
+| Router heartbeat live: cron sets `devices.last_ping` each minute (18:56 tick was cron, not manual); CHR `online:true` from ping alone with RADIUS 7h stale — the exact false-offline case | ✅ | 2026-07-19 |
+| Deploy `718f638` via CI image: /health + site 200; authed `/api/devices` serves `last_ping`; live dashboard.js has new status texts | ✅ | 2026-07-19 |
+| Logrotate added for `/var/log/myfibase-*.log` (weekly/4, maxsize 10M) — cron logs were unrotated; dry-run picks up all three | ✅ | 2026-07-19 |
 
 ---
 
