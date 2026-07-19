@@ -8,20 +8,24 @@
 #   last_seen — latest RADIUS activity (radpostauth/radacct) for its IP
 #   online    — ping answered now, or RADIUS activity in the last 10 minutes
 #
-# Note: ICMP to the router's public IP; once the WireGuard management tunnel
-# lands, ping the tunnel address instead (works behind CGNAT).
+# Pings the WireGuard tunnel IP first (works behind CGNAT), falling back to
+# the public IP — a device whose tunnel identity is provisioned but whose
+# router hasn't applied the wg script yet must not read as offline.
 set -euo pipefail
 
 psql_q() {
   docker exec myfibase_postgres psql -U myfibase -d myfibase -tA -c "$1"
 }
 
-while IFS='|' read -r id ip; do
-  [[ -z "$id" || -z "$ip" ]] && continue
+while IFS='|' read -r id wgip pubip; do
+  [[ -z "$id" ]] && continue
   ok=false
-  if ping -c1 -W2 -q "$ip" >/dev/null 2>&1; then
-    ok=true
-  fi
+  for ip in $wgip $pubip; do
+    if ping -c1 -W2 -q "$ip" >/dev/null 2>&1; then
+      ok=true
+      break
+    fi
+  done
   psql_q "
     UPDATE devices d SET
       last_ping = CASE WHEN $ok THEN NOW() ELSE d.last_ping END,
@@ -37,4 +41,4 @@ while IFS='|' read -r id ip; do
       updated_at = NOW()
     WHERE d.id = '$id'
   " >/dev/null
-done < <(psql_q "SELECT id, host(nas_ip) FROM devices WHERE nas_ip IS NOT NULL")
+done < <(psql_q "SELECT id, COALESCE(host(wg_ip),''), COALESCE(host(nas_ip),'') FROM devices WHERE nas_ip IS NOT NULL OR wg_ip IS NOT NULL")

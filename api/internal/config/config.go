@@ -18,7 +18,7 @@ type Config struct {
 	RedisURL      string
 	RedisPassword string
 
-	JWTSecret string
+	JWTSecret      string
 	JWTExpiryHours int
 
 	ZengapayAPIURL        string
@@ -33,6 +33,13 @@ type Config struct {
 	// ZengapayWebhookIPs restricts /webhooks/zengapay to these IPs/CIDRs.
 	// Empty = disabled, same pattern as the empty webhook HMAC secret.
 	ZengapayWebhookIPs string
+
+	// WGServerPublicKey is the wg0 public key on the host (cat
+	// /etc/wireguard/server.pub). Empty = setup scripts omit the
+	// management-tunnel section.
+	WGServerPublicKey string
+	WGEndpointHost    string
+	WGEndpointPort    string
 }
 
 func Load() *Config {
@@ -65,6 +72,10 @@ func Load() *Config {
 
 		CORSOrigins:        splitList(getEnv("CORS_ALLOWED_ORIGINS", "")),
 		ZengapayWebhookIPs: getEnv("ZENGAPAY_WEBHOOK_IPS", ""),
+
+		WGServerPublicKey: getEnv("WG_SERVER_PUBLIC_KEY", ""),
+		WGEndpointHost:    getEnv("WG_ENDPOINT_HOST", "170.64.177.20"),
+		WGEndpointPort:    getEnv("WG_ENDPOINT_PORT", "51820"),
 	}
 }
 
