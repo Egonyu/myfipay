@@ -1,0 +1,23 @@
+# External uptime probe (P0-D). Runs off-droplet so it still fires when the
+# droplet itself is dead — GitHub emails the workflow author on failure.
+# The on-box watchdog (scripts/watchdog.sh) covers everything finer-grained.
+name: Uptime
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Site up
+        run: |
+          code=$(curl -so /dev/null -w '%{http_code}' -m 15 https://myfipay.com/)
+          echo "GET / -> $code"
+          [ "$code" = "200" ]
+      - name: API up
+        run: |
+          body=$(curl -sf -m 15 https://myfipay.com/api/health)
+          echo "GET /api/health -> $body"
+          echo "$body" | grep -q '"status":"ok"'

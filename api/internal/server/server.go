@@ -25,8 +25,10 @@ func New(ctx context.Context, cfg *config.Config, db *pgxpool.Pool, cache *redis
 	h := handlers.New(cfg, db, cache)
 	go h.StartSessionReaper(ctx)
 
-	// Health
+	// Health — /api/health is the externally reachable alias (nginx only
+	// proxies /api/, /portal/, /webhooks/)
 	r.Get("/health", h.Health)
+	r.Get("/api/health", h.Health)
 
 	// Captive portal — public
 	r.Route("/portal/{slug}", func(r chi.Router) {
