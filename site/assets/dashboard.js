@@ -448,6 +448,7 @@
         return '<tr><td>' + esc(d.name) + '</td><td>' + esc(d.location_name) + '</td><td>' + esc(d.nas_ip) +
           '</td><td>' + (d.online ? pill('active') : '<span class="pill pill-mute">offline</span>') +
           '<div class="hint">' + esc(seen) + '</div></td><td><div class="row-actions">' +
+          '<button class="btn btn-ghost btn-sm act-clients" data-id="' + esc(d.id) + '">Clients</button>' +
           '<button class="btn btn-ghost btn-sm act-setup" data-id="' + esc(d.id) + '">Setup</button>' +
           '<button class="btn btn-ghost btn-sm act-test" data-id="' + esc(d.id) + '">Test</button>' +
           '<button class="btn btn-ghost btn-sm act-edit" data-id="' + esc(d.id) + '">Edit</button>' +
@@ -489,6 +490,9 @@
         });
       });
 
+      content().querySelectorAll('.act-clients').forEach(function (b) {
+        b.addEventListener('click', function () { clientsModal(b.dataset.id); });
+      });
       content().querySelectorAll('.act-setup').forEach(function (b) {
         b.addEventListener('click', function () {
           setupModal(devices.find(function (x) { return x.id === b.dataset.id; }));
@@ -586,6 +590,27 @@
       }).catch(function (e) { el('test-out').textContent = 'Check failed: ' + e.message; });
     }
     el('retest').addEventListener('click', run);
+    run();
+  }
+
+  function clientsModal(deviceID) {
+    openModal('Connected now', '<div id="clients-out"><p class="empty-note">Loading…</p></div>' +
+      '<button class="btn btn-ghost btn-block" id="clients-refresh">Refresh</button>' +
+      '<p class="hint" style="margin-top:10px">Live sessions the router has reported. Data used updates every few minutes, not in real time.</p>');
+    function run() {
+      api('/api/devices/' + deviceID + '/clients').then(function (cs) {
+        var rows = cs.map(function (c) {
+          return '<tr><td>' + esc(c.username || '—') + '</td><td>' + esc(c.mac || c.ip || '—') +
+            '</td><td>' + (c.started_at ? dt(c.started_at) : '—') +
+            '</td><td>' + bytesFmt((c.bytes_in || 0) + (c.bytes_out || 0)) + '</td></tr>';
+        });
+        el('clients-out').innerHTML = table(['Customer', 'Device', 'Connected since', 'Data used'], rows,
+          'Nobody is connected through this router right now.');
+      }).catch(function (e) {
+        el('clients-out').innerHTML = '<p class="empty-note">Could not load clients: ' + esc(e.message) + '</p>';
+      });
+    }
+    el('clients-refresh').addEventListener('click', run);
     run();
   }
 

@@ -338,3 +338,58 @@ func (h *Handler) DeviceStatus(w http.ResponseWriter, r *http.Request) {
 		"checked_at": time.Now().UTC(),
 	})
 }
+
+// DeviceClients lists who is on the router right now: open radacct rows
+// (no Stop yet) for its NAS IP. Bytes/duration are as of the router's last
+// interim update, not real time.
+func (h *Handler) DeviceClients(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetClaims(r)
+	deviceID := chi.URLParam(r, "id")
+	ctx := context.Background()
+
+	d, err := h.deviceByID(ctx, deviceID, claims.TenantID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, "NOT_FOUND", "device not found")
+		return
+	}
+	if d.NasIP == "" {
+		respond(w, http.StatusOK, []struct{}{})
+		return
+	}
+
+	type clientRow struct {
+		Username    string     `json:"username"`
+		IP          string     `json:"ip"`
+		Mac         string     `json:"mac"`
+		StartedAt   *time.Time `json:"started_at"`
+		UpdatedAt   *time.Time `json:"updated_at"`
+		SessionSecs int64      `json:"session_secs"`
+		BytesIn     int64      `json:"bytes_in"`
+		BytesOut    int64      `json:"bytes_out"`
+	}
+
+	rows, err := h.db.Query(ctx, `
+		SELECT COALESCE(username,''), COALESCE(host(framedipaddress),''), COALESCE(callingstationid,''),
+		       acctstarttime, acctupdatetime, COALESCE(acctsessiontime,0),
+		       COALESCE(acctinputoctets,0), COALESCE(acctoutputoctets,0)
+		FROM radacct
+		WHERE nasipaddress = $1 AND acctstoptime IS NULL
+		ORDER BY acctstarttime DESC NULLS LAST
+		LIMIT 200
+	`, d.NasIP)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "DB_ERROR", "query failed")
+		return
+	}
+	defer rows.Close()
+
+	clients := []clientRow{}
+	for rows.Next() {
+		var c clientRow
+		if err := rows.Scan(&c.Username, &c.IP, &c.Mac, &c.StartedAt, &c.UpdatedAt,
+			&c.SessionSecs, &c.BytesIn, &c.BytesOut); err == nil {
+			clients = append(clients, c)
+		}
+	}
+	respond(w, http.StatusOK, clients)
+}

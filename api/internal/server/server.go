@@ -93,6 +93,7 @@ func New(ctx context.Context, cfg *config.Config, db *pgxpool.Pool, cache *redis
 		r.Delete("/api/devices/{id}", h.DeleteDevice)
 		r.Get("/api/devices/{id}/script", h.DeviceScript)
 		r.Get("/api/devices/{id}/status", h.DeviceStatus)
+		r.Get("/api/devices/{id}/clients", h.DeviceClients)
 
 		// Plans
 		r.Get("/api/plans", h.ListOperatorPlans)
