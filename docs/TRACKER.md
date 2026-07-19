@@ -81,8 +81,8 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 ### P0 — correctness & stability systems (reprioritized 2026-07-19 per ENGINEERING_STANDARDS.md; these now come before external integrations)
 | # | Task | Owner | Notes |
 |---|---|---|---|
-| A | Unit tests: commission math, payout balance math, webhook dedup, HMAC verify | Claude | The money paths — moved up from P1. Started 2026-07-19 |
-| B | CI: GitHub Actions — `go vet` + `go test` on every push | Claude | Tests that don't run automatically don't exist. Moved up from P3 |
+| A | ~~Unit tests: commission math, payout balance math, webhook dedup, HMAC verify~~ ✅ | Done | Verified 2026-07-19: 9 tests in `handlers/money_test.go` + `handlers/payment_test.go` (platform/agent commission, operator/agent available balance, commission-rate parsing, published rates, HMAC verify, ZengaPay event classification + payload decoding); `go vet` + `go test ./...` green locally and in CI |
+| B | ~~CI: GitHub Actions — `go vet` + `go test` on every push~~ ✅ | Done | Verified 2026-07-19: `.github/workflows/ci.yml` ran on push of `e6072b6`, conclusion `success` (checked via GitHub API) |
 | C | Deploy step (git-driven) — stop live-editing prod | Claude | `site/` is currently the live web root edited in place; API deploys are manual `docker compose` |
 | D | Uptime + error monitoring (Uptime Kuma or external ping + API error log surfacing) | Claude | Moved up from P3 — "a customer told us" is not monitoring |
 | E | Integration test: pay → webhook → session grant (ephemeral DB/Redis) | Claude | Moved up from P1 |
@@ -162,6 +162,8 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | Router onboarding e2e: register device via API → `nas` row → cron sync adds UFW rule + FreeRADIUS logs "Adding client 203.0.113.10 (mfb-…)" → script/status endpoints OK → delete → UFW rule + rows removed | ✅ | 2026-07-18 |
 | `radpostauth.nasipaddress` populated by patched postauth query (radtest → row shows `127.0.0.1`) | ✅ | 2026-07-18 |
 | Portal `?login=` (MikroTik `$(link-login-only)`) rendered into page; `javascript:` scheme rejected | ✅ | 2026-07-18 |
+| Money-path unit tests: `go vet` + `go test ./...` green locally; CI run on `e6072b6` (push to main) concluded `success` | ✅ | 2026-07-19 |
+| API rebuilt + redeployed from committed `e6072b6` (not working tree), container recreated, `/health` OK | ✅ | 2026-07-19 |
 
 ---
 
@@ -215,6 +217,14 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-19 (later) — Engineering standards adopted; P0-A tests + P0-B CI shipped
+- `docs/ENGINEERING_STANDARDS.md` written and made binding (tests+CI on money paths, no live-editing prod, monitoring before pilot, stability before MikroTik/ZengaPay); backlog reprioritized — new P0 is correctness/stability systems (A–E), old P0 items moved to P0.5 pilot gate
+- Money logic extracted from `handlers/agent.go`/`payment.go` into `handlers/money.go` (pure functions) so it's testable without DB; behavior unchanged
+- 9 unit tests (`money_test.go`, `payment_test.go`): platform/agent commission, operator/agent available balance, commission-rate parsing, published 8%/3% rates, HMAC verify, ZengaPay event classification + payload decoding — `go vet` + `go test ./...` green
+- CI: `.github/workflows/ci.yml` (vet + test on every push) — first run on `e6072b6` concluded `success` (verified via GitHub API; `gh` CLI not installed on droplet)
+- Deployed per the new standard: committed first, then rebuilt image from the committed tree; container recreated, `/health` OK (initial deploy attempt was cut off by a session break — container was still 12h old; caught and redone this session)
+- P0 remaining: C (git-driven deploy step), D (uptime/error monitoring), E (integration test pay→webhook→session)
 
 ### 2026-07-19 — Dashboard visual restyle finished ("Modernize" theme)
 - Picked up yesterday's uncommitted restyle of the dashboard toward the Modernize admin-template look (reference mockups in `dashboard/template/`, gitignored — not committed): CSS token remap scoped to `.dash-body` (blue `#5d87ff` brand, soft shadows, pastel accent palette; public site keeps green), stat tiles with pastel icon chips, welcome banner, card shadows, restyled tables/pills/modals — that part was already done and live
