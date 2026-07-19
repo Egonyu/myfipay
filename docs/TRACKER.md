@@ -211,12 +211,18 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 | DB | `myfibase`/`myfibase`, migrations 001–004 applied |
 | Env | `.env` (gitignored): ZengaPay sandbox URL + token wired; webhook secret empty (sandbox sends none) |
 | Backups | cron 2am daily → `backups/` (pg_dump + code, keep 7) — **local only** |
-| Deploy | `docker compose build api && docker compose up -d api` |
+| Deploy | `scripts/deploy.sh` — site: git-archive → release symlink; api: pulls CI-built `ghcr.io/egonyu/myfipay/api:<sha>` (droplet is 1GB, on-box Go builds get OOM-killed; `--build` = emergency fallback) |
 | Migrations | `docker exec -i myfibase_postgres psql -U myfibase -d myfibase < api/db/migrations/NNN_*.sql` |
 
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-19 (later still) — OOM diagnosis; deploys now pull CI-built images
+- Repeated "Killed" session crashes diagnosed via kernel log: Linux OOM killer — 1GB droplet can't hold Claude Code + dockerd + a Go compile (`compile` in the deploy's docker build was killed at 04:44, `claude` at 04:59 and 05:42). Stale VS Code server killed by founder freed ~700Mi swap
+- Fix: CI now builds and pushes `ghcr.io/egonyu/myfipay/api:<sha>` + `:latest` on every main push (`ci.yml` `image` job, needs tests green); `deploy.sh` pulls that image (waits up to 10min for CI) instead of compiling on-box; `--build` kept as emergency fallback; keeps 3 image tags for rollback
+- **One-time manual step**: after the first CI image push, set the GHCR package `myfipay/api` to public (repo is public; anonymous pull then needs no PAT on the droplet)
+- Noted: `myfibase_adminer` container up 3 weeks on prod — trivial memory but a security exposure; stop when not in active use (security posture is blocking)
 
 ### 2026-07-19 (later) — Engineering standards adopted; P0-A tests + P0-B CI shipped
 - `docs/ENGINEERING_STANDARDS.md` written and made binding (tests+CI on money paths, no live-editing prod, monitoring before pilot, stability before MikroTik/ZengaPay); backlog reprioritized — new P0 is correctness/stability systems (A–E), old P0 items moved to P0.5 pilot gate

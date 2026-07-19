@@ -4,10 +4,13 @@
 # Deploys HEAD only — refuses a dirty tree. Two independent parts:
 #   site  : git-archive site/ into /var/www/myfipay-site/releases/<sha>,
 #           atomically swap the `current` symlink nginx serves
-#   api   : docker compose build+up, skipped when api/ is unchanged since
-#           the last deployed API sha (force with --api)
+#   api   : pull the CI-built image ghcr.io/egonyu/myfipay/api:<sha> and
+#           `up -d`; skipped when api/ is unchanged since the last deployed
+#           API sha (force with --api). The droplet has 1GB RAM — compiling
+#           Go here gets OOM-killed, so images are built by CI (ci.yml).
+#           --build falls back to an on-box build (emergencies only).
 #
-# Usage: scripts/deploy.sh [--api] [--site-only]
+# Usage: scripts/deploy.sh [--api] [--site-only] [--build]
 set -euo pipefail
 
 REPO=/var/www/myfibase
@@ -18,11 +21,13 @@ KEEP_RELEASES=3
 
 FORCE_API=0
 SITE_ONLY=0
+LOCAL_BUILD=0
 for arg in "$@"; do
     case "$arg" in
         --api) FORCE_API=1 ;;
         --site-only) SITE_ONLY=1 ;;
-        *) echo "usage: $0 [--api] [--site-only]" >&2; exit 2 ;;
+        --build) LOCAL_BUILD=1 ;;
+        *) echo "usage: $0 [--api] [--site-only] [--build]" >&2; exit 2 ;;
     esac
 done
 
@@ -71,12 +76,37 @@ else
         fi
     fi
     if [ "$need_api" -eq 1 ]; then
-        echo "api: building from $SHORT ..."
-        docker compose build api 2>&1 | tail -2
-        docker compose up -d api 2>&1 | tail -2
+        export API_IMAGE_TAG=$SHA
+        if [ "$LOCAL_BUILD" -eq 1 ]; then
+            echo "api: building $SHORT on-box (--build; watch for OOM) ..."
+            docker compose build api 2>&1 | tail -2
+        else
+            echo "api: pulling CI-built image for $SHORT ..."
+            pulled=0
+            for attempt in $(seq 1 20); do
+                if docker compose pull -q api 2>/dev/null; then
+                    pulled=1
+                    break
+                fi
+                echo "api: image not on GHCR yet (CI still building?) — retry $attempt/20 in 30s"
+                sleep 30
+            done
+            if [ "$pulled" -ne 1 ]; then
+                echo "ABORT: could not pull ghcr.io/egonyu/myfipay/api:$SHORT after 10min." >&2
+                echo "  - check CI: https://github.com/Egonyu/myfipay/actions" >&2
+                echo "  - package must be PUBLIC for anonymous pull (package settings on GitHub)" >&2
+                echo "  - emergency fallback: $0 --api --build" >&2
+                exit 1
+            fi
+        fi
+        docker compose up -d --no-build api 2>&1 | tail -2
         sleep 3
         echo "$SHA" > "$STATE/api-sha"
         echo "api: deployed $SHORT"
+        # drop api image tags no longer needed (keep 3 newest for rollback)
+        docker images ghcr.io/egonyu/myfipay/api --format '{{.Tag}}' \
+            | grep -v '^latest$' | tail -n +4 \
+            | xargs -r -I{} docker rmi ghcr.io/egonyu/myfipay/api:{} >/dev/null 2>&1 || true
     else
         echo "api: unchanged since ${last_api:0:7}, skipped (force with --api)"
     fi

@@ -45,6 +45,9 @@ services:
       retries: 5
 
   api:
+    # Normal deploys pull this CI-built image (deploy.sh sets API_IMAGE_TAG to
+    # the git sha); `build:` remains only for the emergency --build fallback.
+    image: ghcr.io/egonyu/myfipay/api:${API_IMAGE_TAG:-latest}
     build:
       context: ./api
       dockerfile: Dockerfile
