@@ -426,8 +426,15 @@ func (h *Handler) TerminateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Revoke authorization first (no re-login), then kick the live hotspot
+	// session off the router (RFC 5176 Disconnect, best-effort).
 	h.expireSession(username, sessionID)
-	respond(w, http.StatusOK, map[string]string{"message": "session terminated"})
+	disconnects := h.disconnectLiveSessions(ctx, username)
+
+	respond(w, http.StatusOK, map[string]any{
+		"message":    "session terminated",
+		"disconnect": disconnects,
+	})
 }
 
 // ─── Locations ────────────────────────────────────────────────────────────────

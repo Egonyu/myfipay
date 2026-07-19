@@ -272,7 +272,14 @@
       content().querySelectorAll('.act-term').forEach(function (b) {
         b.addEventListener('click', function () {
           if (!confirm('End this session now? The customer will be disconnected.')) return;
-          api('/api/sessions/' + b.dataset.id, { method: 'DELETE' }).then(viewSessions).catch(function (e) { alert(e.message); });
+          api('/api/sessions/' + b.dataset.id, { method: 'DELETE' }).then(function (res) {
+            var d = (res && res.disconnect) || [];
+            var kicked = d.some(function (r) { return r.acked; });
+            if (d.length && !kicked) {
+              alert('Session ended. Note: the router did not confirm the kick-off — the device may stay online until its time runs out.');
+            }
+            viewSessions();
+          }).catch(function (e) { alert(e.message); });
         });
       });
       content().querySelectorAll('.act-extend').forEach(function (b) {
