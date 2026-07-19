@@ -69,15 +69,9 @@ services:
   # nginx and freeradius are installed natively (apt) on the host
   # to avoid Docker image availability issues and simplify port binding
 
-  adminer:
-    image: adminer:latest
-    container_name: myfibase_adminer
-    restart: unless-stopped
-    <<: *default-logging
-    ports:
-      - "127.0.0.1:8081:8080"
-    depends_on:
-      - postgres
+  # adminer removed 2026-07-19 (P1 security): DB admin on a prod payments box
+  # is standing exposure. For ad-hoc inspection use:
+  #   docker exec -it myfibase_postgres psql -U myfibase -d myfibase
 
 volumes:
   postgres_data:

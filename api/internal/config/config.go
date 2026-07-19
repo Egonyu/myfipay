@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -23,6 +24,15 @@ type Config struct {
 	ZengapayAPIURL        string
 	ZengapayAPIToken      string
 	ZengapayWebhookSecret string
+
+	// CORSOrigins pins Access-Control-Allow-Origin. Empty list + development
+	// env = echo any origin (dev convenience); empty list + production = no
+	// cross-origin access (dashboard is same-origin behind nginx anyway).
+	CORSOrigins []string
+
+	// ZengapayWebhookIPs restricts /webhooks/zengapay to these IPs/CIDRs.
+	// Empty = disabled, same pattern as the empty webhook HMAC secret.
+	ZengapayWebhookIPs string
 }
 
 func Load() *Config {
@@ -52,7 +62,20 @@ func Load() *Config {
 		ZengapayAPIURL:        getEnv("ZENGAPAY_API_URL", "https://api.zengapay.com"),
 		ZengapayAPIToken:      getEnv("ZENGAPAY_API_TOKEN", ""),
 		ZengapayWebhookSecret: getEnv("ZENGAPAY_WEBHOOK_SECRET", ""),
+
+		CORSOrigins:        splitList(getEnv("CORS_ALLOWED_ORIGINS", "")),
+		ZengapayWebhookIPs: getEnv("ZENGAPAY_WEBHOOK_IPS", ""),
 	}
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func buildDSN() string {

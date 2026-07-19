@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"log"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
@@ -20,7 +22,7 @@ func New(ctx context.Context, cfg *config.Config, db *pgxpool.Pool, cache *redis
 	r.Use(chiMiddleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.CleanPath)
-	r.Use(corsMiddleware)
+	r.Use(corsMiddleware(cfg.CORSOrigins, cfg.AppEnv == "development"))
 
 	h := handlers.New(cfg, db, cache)
 	go h.StartSessionReaper(ctx)
@@ -39,8 +41,12 @@ func New(ctx context.Context, cfg *config.Config, db *pgxpool.Pool, cache *redis
 		r.Get("/session", h.SessionStatus)
 	})
 
-	// ZengaPay webhook — public, HMAC verified
-	r.Post("/webhooks/zengapay", h.ZengapayWebhook)
+	// ZengaPay webhook — public, HMAC verified; optional source-IP allowlist
+	webhookNets, err := middleware.ParseIPList(cfg.ZengapayWebhookIPs)
+	if err != nil {
+		log.Fatalf("invalid ZENGAPAY_WEBHOOK_IPS: %v", err)
+	}
+	r.With(middleware.RequireSourceIP(webhookNets)).Post("/webhooks/zengapay", h.ZengapayWebhook)
 
 	// Auth — public
 	r.Post("/api/auth/login", h.Login)
@@ -141,20 +147,41 @@ func New(ctx context.Context, cfg *config.Config, db *pgxpool.Pool, cache *redis
 	return r
 }
 
-// corsMiddleware allows the dashboard origin during development.
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+// corsMiddleware sets CORS headers only for pinned origins. With no pinned
+// origins, dev mode echoes any origin (local tooling); production sends no
+// CORS headers at all — the dashboard is same-origin behind nginx and needs
+// none. Credentialed CORS with an echoed origin would let any site drive the
+// API with a logged-in user's cookie.
+func corsMiddleware(origins []string, devMode bool) func(http.Handler) http.Handler {
+	allowed := make(map[string]bool, len(origins))
+	for _, o := range origins {
+		allowed[strings.TrimRight(o, "/")] = true
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if originAllowed(origin, allowed, devMode) {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Vary", "Origin")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func originAllowed(origin string, allowed map[string]bool, devMode bool) bool {
+	if origin == "" {
+		return false
+	}
+	if allowed[strings.TrimRight(origin, "/")] {
+		return true
+	}
+	return devMode && len(allowed) == 0
 }

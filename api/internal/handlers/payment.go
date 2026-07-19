@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/myfibase/myfibase/internal/middleware"
 )
 
 type payRequest struct {
@@ -49,13 +50,12 @@ func (h *Handler) InitiatePayment(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	_ = slug
 
-	// Rate limit: 10 payment attempts per phone per 5 minutes
+	// Rate limit: 10 payment attempts per IP per 5 minutes. ClientIP uses the
+	// nginx-set X-Real-IP — the first X-Forwarded-For element is
+	// client-supplied and was previously forgeable to evade this limit.
 	ctx := context.Background()
-	clientIP := r.RemoteAddr
-	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
-		clientIP = strings.SplitN(fwd, ",", 2)[0]
-	}
-	rateLimitKey := "ratelimit:pay:" + strings.TrimSpace(clientIP)
+	clientIP := middleware.ClientIP(r)
+	rateLimitKey := "ratelimit:pay:" + clientIP
 	count, _ := h.cache.Incr(ctx, rateLimitKey).Result()
 	if count == 1 {
 		h.cache.Expire(ctx, rateLimitKey, 5*time.Minute)

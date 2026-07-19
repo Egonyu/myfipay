@@ -9,6 +9,11 @@
 #   2. Restart FreeRADIUS to load the new client list.
 # Runs from cron every minute (/etc/cron.d/myfibase-radius-sync); no-op unless
 # the table changed since the last run.
+#
+# Restart (not reload) is required: with read_clients=yes FreeRADIUS 3.2 loads
+# SQL clients only at startup — HUP answers "No files changed. Ignoring"
+# (verified live 2026-07-19). NAS retransmission covers the sub-second gap.
+# Revisit with a dynamic_clients virtual server if per-add restarts hurt at scale.
 set -euo pipefail
 
 STATE_DIR=/var/lib/myfibase
@@ -49,6 +54,11 @@ for ip in "${WANT[@]:-}"; do
   fi
 done
 
+# Never let a broken config turn the cron restart into an outage
+if ! freeradius -C >/dev/null 2>&1; then
+  echo "$(date -Is) ERROR: freeradius config check failed — skipping restart" >&2
+  exit 1
+fi
 systemctl restart freeradius
 echo "$HASH" > "$STATE_FILE"
 echo "$(date -Is) sync complete ($(psql_q 'SELECT COUNT(*) FROM nas') clients)"

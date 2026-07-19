@@ -17,6 +17,36 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+// Login brute-force limits: only failed attempts count, so shared IPs (carrier
+// CGNAT) with legitimate users are unaffected. Redis errors fail open — bcrypt
+// remains the backstop.
+const (
+	loginMaxPerIP      = 20
+	loginMaxPerAccount = 10
+	loginWindowSecs    = 15 * 60
+)
+
+// loginLocked decides lockout from current failure counts (pure, tested).
+func loginLocked(ipFails, acctFails int64) bool {
+	return ipFails >= loginMaxPerIP || acctFails >= loginMaxPerAccount
+}
+
+func (h *Handler) loginFailKeys(ip, email string) (string, string) {
+	return "ratelimit:login:ip:" + ip, "ratelimit:login:acct:" + email
+}
+
+func (h *Handler) loginFailed(ctx context.Context, ip, email string) {
+	for _, key := range []string{
+		"ratelimit:login:ip:" + ip,
+		"ratelimit:login:acct:" + email,
+	} {
+		n, err := h.cache.Incr(ctx, key).Result()
+		if err == nil && n == 1 {
+			h.cache.Expire(ctx, key, loginWindowSecs*time.Second)
+		}
+	}
+}
+
 type userRow struct {
 	ID           string
 	TenantID     string
@@ -40,6 +70,16 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := context.Background()
+	clientIP := middleware.ClientIP(r)
+	ipKey, acctKey := h.loginFailKeys(clientIP, req.Email)
+	ipFails, _ := h.cache.Get(ctx, ipKey).Int64()
+	acctFails, _ := h.cache.Get(ctx, acctKey).Int64()
+	if loginLocked(ipFails, acctFails) {
+		w.Header().Set("Retry-After", "900")
+		respondError(w, http.StatusTooManyRequests, "TOO_MANY_ATTEMPTS", "too many failed login attempts — try again in 15 minutes")
+		return
+	}
+
 	var u userRow
 	err := h.db.QueryRow(ctx,
 		`SELECT id, tenant_id, email, name, role, status, password
@@ -47,6 +87,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		req.Email,
 	).Scan(&u.ID, &u.TenantID, &u.Email, &u.Name, &u.Role, &u.Status, &u.PasswordHash)
 	if err != nil {
+		h.loginFailed(ctx, clientIP, req.Email)
 		respondError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "invalid email or password")
 		return
 	}
@@ -66,9 +107,12 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)); err != nil {
+		h.loginFailed(ctx, clientIP, req.Email)
 		respondError(w, http.StatusUnauthorized, "INVALID_CREDENTIALS", "invalid email or password")
 		return
 	}
+	// successful login heals the account lockout (IP counter just expires)
+	h.cache.Del(ctx, acctKey)
 
 	claims := &middleware.UserClaims{
 		UserID:   u.ID,
