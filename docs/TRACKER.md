@@ -83,9 +83,9 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 |---|---|---|---|
 | A | ~~Unit tests: commission math, payout balance math, webhook dedup, HMAC verify~~ ✅ | Done | Verified 2026-07-19: 9 tests in `handlers/money_test.go` + `handlers/payment_test.go` (platform/agent commission, operator/agent available balance, commission-rate parsing, published rates, HMAC verify, ZengaPay event classification + payload decoding); `go vet` + `go test ./...` green locally and in CI |
 | B | ~~CI: GitHub Actions — `go vet` + `go test` on every push~~ ✅ | Done | Verified 2026-07-19: `.github/workflows/ci.yml` ran on push of `e6072b6`, conclusion `success` (checked via GitHub API) |
-| C | Deploy step (git-driven) — stop live-editing prod | Claude | `site/` is currently the live web root edited in place; API deploys are manual `docker compose` |
-| D | Uptime + error monitoring (Uptime Kuma or external ping + API error log surfacing) | Claude | Moved up from P3 — "a customer told us" is not monitoring |
-| E | Integration test: pay → webhook → session grant (ephemeral DB/Redis) | Claude | Moved up from P1 |
+| C | ~~Deploy step (git-driven) — stop live-editing prod~~ ✅ | Done | Verified 2026-07-19: `scripts/deploy.sh` (refuses dirty tree; site release symlink swap; api pulls CI-built GHCR image since `01acf30` — 1GB droplet OOMs on on-box builds); used for 2 successful deploys same day, /health + site 200s verified each time |
+| D | Uptime + error monitoring | Claude | Nearly done 2026-07-19: on-box watchdog (`scripts/watchdog.sh`, minute cron **installed + test-run verified**, transition alerts + 5xx alerts → ntfy topic in `.env`); container log caps in compose. REMAINING to verify: first scheduled run of external probe `.github/workflows/uptime.yml` (pushed today, GitHub cron can lag ~1h — check Actions tab) |
+| E | ~~Integration test: pay → webhook → session grant (ephemeral DB/Redis)~~ ✅ | Done | Verified 2026-07-19: `api/integration/integration_test.go` — pay 202→ZengaPay stub, signed webhook→active session + radcheck/radreply + confirmed payment + 3% commission, dedup, bad-sig 401, status endpoint. PASS locally (`scripts/integration-test.sh`, ephemeral PG+Redis) and in CI (`integration` job, service containers, run `d5a9032` success); GHCR image push now gated on it |
 
 ### P0.5 — pilot gate (M8) — after P0 systems are green
 | # | Task | Owner | Notes |
@@ -217,6 +217,13 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-19 (evening) — P0-E integration test shipped; P0-C verified; P0-D watchdog cron installed
+- P0-E done: `api/integration/integration_test.go` (build tag `integration`) exercises the real handler stack against ephemeral Postgres+Redis — pay→webhook→session grant, RADIUS rows, confirmed payment, 3% agent commission, webhook dedup, bad-signature 401, status endpoint. Green locally (2s) and in CI (`d5a9032`)
+- CI `integration` job added (PG+Redis service containers); **GHCR image push now requires unit + integration tests green** — unmergeable money-path breakage can't become a deployable image
+- `scripts/integration-test.sh` for local runs: loopback high ports (55432/56379), tmpfs postgres, auto-teardown, `GOFLAGS=-p=1 GOMEMLIMIT=200MiB` so the 1GB box survives the compile
+- P0-D gap from the OOM-killed session closed: watchdog minute-cron was never installed — now installed and test-run verified; uptime.yml awaiting first scheduled fire on GitHub
+- Deployed `d5a9032` via pull-based deploy; /health + site 200s verified. P0 A–E now all shipped; only uptime.yml first-fire check remains
 
 ### 2026-07-19 (later still) — OOM diagnosis; deploys now pull CI-built images
 - Repeated "Killed" session crashes diagnosed via kernel log: Linux OOM killer — 1GB droplet can't hold Claude Code + dockerd + a Go compile (`compile` in the deploy's docker build was killed at 04:44, `claude` at 04:59 and 05:42). Stale VS Code server killed by founder freed ~700Mi swap
