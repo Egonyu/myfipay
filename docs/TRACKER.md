@@ -46,13 +46,13 @@
 ### Required before real money (P0/P1 below) ❌
 - [x] **UFW active** (verified 2026-07-18: allow 22/80/443 only, v4+v6) — public RADIUS exposure closed at the firewall. `clients.conf` lockdown + secret rotation still open below
 - [x] **HTTPS on the domain** — `https://myfipay.com` live (certbot), domain HTTP 301s to HTTPS; auth cookie now `Secure` (deployed + verified 2026-07-18). ⚠️ Captive portal via raw IP is still HTTP until NAS/walled-garden and ZengaPay callback move to the domain
-- [ ] ZengaPay webhook IP allowlist (fires from known IPs; one middleware)
+- [x] ZengaPay webhook IP allowlist — middleware live 2026-07-19 (`ZENGAPAY_WEBHOOK_IPS`, empty=disabled like the HMAC secret); ⚠️ set the prod IPs when ZengaPay prod lands
 - [x] **`clients.conf` locked down** (verified 2026-07-18): the `0.0.0.0/0` shared-secret client is gone; NAS clients now come from the `nas` table (per-device random secrets, written by the router wizard), UFW opens 1812-1813 only per registered router IP (`radius-sync.sh` cron). Only a localhost test client remains in `clients.conf`. This also closes the RADIUS-secret exposure: the shared secret no longer authenticates any external client
 - [x] Rotate super-admin password ✅ 2026-07-18 · RADIUS shared-secret exposure closed via `clients.conf` lockdown above (shared client removed entirely; per-device secrets now)
 - [ ] Offsite backups — current backups live on the same disk they protect (DO Spaces, ~5 lines in backup.sh)
 - [x] **Fail2ban + logrotate** ✅ verified 2026-07-19: `fail2ban-server` active since Jul 07, sshd jail has 3,497 total bans (26k failed attempts); logrotate configs present incl. freeradius
-- [ ] CORS allowlist — currently echoes any Origin with credentials=true; must pin to dashboard origin(s) in prod
-- [ ] Login rate limiting / lockout (bcrypt slows brute force but nothing counts failures)
+- [x] CORS allowlist ✅ 2026-07-19 — pinned to `CORS_ALLOWED_ORIGINS` (myfipay.com + www); unpinned origins get no CORS headers
+- [x] Login rate limiting / lockout ✅ 2026-07-19 — Redis failure counters, 20/IP + 10/account per 15min, failures only (CGNAT-safe), success heals account counter
 - [ ] Session token revocation (Redis denylist) — currently JWTs live 24h with no kill switch
 
 ---
@@ -84,7 +84,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | A | ~~Unit tests: commission math, payout balance math, webhook dedup, HMAC verify~~ ✅ | Done | Verified 2026-07-19: 9 tests in `handlers/money_test.go` + `handlers/payment_test.go` (platform/agent commission, operator/agent available balance, commission-rate parsing, published rates, HMAC verify, ZengaPay event classification + payload decoding); `go vet` + `go test ./...` green locally and in CI |
 | B | ~~CI: GitHub Actions — `go vet` + `go test` on every push~~ ✅ | Done | Verified 2026-07-19: `.github/workflows/ci.yml` ran on push of `e6072b6`, conclusion `success` (checked via GitHub API) |
 | C | ~~Deploy step (git-driven) — stop live-editing prod~~ ✅ | Done | Verified 2026-07-19: `scripts/deploy.sh` (refuses dirty tree; site release symlink swap; api pulls CI-built GHCR image since `01acf30` — 1GB droplet OOMs on on-box builds); used for 2 successful deploys same day, /health + site 200s verified each time |
-| D | Uptime + error monitoring | Claude | Nearly done 2026-07-19: on-box watchdog (`scripts/watchdog.sh`, minute cron **installed + test-run verified**, transition alerts + 5xx alerts → ntfy topic in `.env`); container log caps in compose. REMAINING to verify: first scheduled run of external probe `.github/workflows/uptime.yml` (pushed today, GitHub cron can lag ~1h — check Actions tab) |
+| D | ~~Uptime + error monitoring~~ ✅ | Done | Fully verified 2026-07-19: watchdog minute-cron live; external probe `uptime.yml` fired on schedule 3× (07:34/08:32/09:25 UTC), all `success` — **P0 A–E complete** |
 | E | ~~Integration test: pay → webhook → session grant (ephemeral DB/Redis)~~ ✅ | Done | Verified 2026-07-19: `api/integration/integration_test.go` — pay 202→ZengaPay stub, signed webhook→active session + radcheck/radreply + confirmed payment + 3% commission, dedup, bad-sig 401, status endpoint. PASS locally (`scripts/integration-test.sh`, ephemeral PG+Redis) and in CI (`integration` job, service containers, run `d5a9032` success); GHCR image push now gated on it |
 
 ### P0.5 — pilot gate (M8) — after P0 systems are green
@@ -100,18 +100,18 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | 8 | Founder dry-run | Daniel | Sign up → first paid session with zero server access. Gates M8 (§3 litmus test) |
 
 ### P1 — before real money flows
-- [ ] Webhook IP allowlist middleware
+- [x] ~~Webhook IP allowlist middleware~~ ✅ 2026-07-19 (env-gated; activate with prod IPs)
 - [x] ~~Rotate RADIUS secret~~ ✅ resolved 2026-07-18 via `clients.conf` lockdown — the exposed shared secret's `0.0.0.0/0` client no longer exists; routers use per-device random secrets (— admin password rotated earlier same day)
-- [ ] CORS pinned origins (prod mode)
+- [x] ~~CORS pinned origins~~ ✅ 2026-07-19
 - [ ] Offsite backups to DO Spaces
 - [ ] ~~NAS device registration flow~~ → folded into P0.5 #7 (router self-onboarding wizard)
 - [ ] Email delivery infra (SMTP/SES/Resend): KYC approve/reject notification, password reset, receipts — prerequisite for several P2 items and for the KYC flow's "you will be notified" promise
 - [ ] ToS + privacy policy + published fee schedule (8% platform, 3% agent) — trust/legal before real money
-- [ ] Login attempt rate limiting
+- [x] ~~Login attempt rate limiting~~ ✅ 2026-07-19
 - [ ] ~~Unit tests (money paths)~~ → promoted to P0-A
 - [ ] ~~Integration test pay→webhook→session~~ → promoted to P0-E
 - [ ] Dashboard XSS audit — review every innerHTML interpolation for esc() coverage
-- [ ] `radius-sync.sh`: reload instead of full FreeRADIUS restart (drops in-flight auths); remove Adminer from prod box
+- [x] ~~`radius-sync.sh` reload; remove Adminer~~ ✅ 2026-07-19 — Adminer container+image removed from box and compose. Reload is **not possible**: live HUP test showed FreeRADIUS 3.2 ignores SQL client changes ("HUP - No files changed"); restart kept (hash-gated, NAS retransmits) with a `freeradius -C` pre-check so a bad config can't become an outage. Revisit dynamic_clients at scale
 - [x] ~~Fail2ban + logrotate~~ ✅ verified 2026-07-19 (see §2)
 
 ### P2 — product completeness
@@ -164,6 +164,12 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | Portal `?login=` (MikroTik `$(link-login-only)`) rendered into page; `javascript:` scheme rejected | ✅ | 2026-07-18 |
 | Money-path unit tests: `go vet` + `go test ./...` green locally; CI run on `e6072b6` (push to main) concluded `success` | ✅ | 2026-07-19 |
 | API rebuilt + redeployed from committed `e6072b6` (not working tree), container recreated, `/health` OK | ✅ | 2026-07-19 |
+| Uptime probe `uptime.yml` fired on GitHub cron 3× (07:34/08:32/09:25 UTC), all success — P0-D closed | ✅ | 2026-07-19 |
+| FreeRADIUS HUP experiment: SQL client inserted, reload → daemon "HUP - No files changed. Ignoring"; restart loads it — reload cannot sync NAS clients | ✅ | 2026-07-19 |
+| Live: CORS pinned — `Origin: https://myfipay.com` gets ACAO, `evil.example` gets zero CORS headers | ✅ | 2026-07-19 |
+| Live: login lockout — 10 failures on one account → 11th attempt 429 (Retry-After 900); test keys cleaned | ✅ | 2026-07-19 |
+| Live: webhook endpoint unaffected with `ZENGAPAY_WEBHOOK_IPS` empty (no 403) | ✅ | 2026-07-19 |
+| Deploy `a2e5c14` via CI-pulled image: /health + site + /dashboard/ + /login all 200 | ✅ | 2026-07-19 |
 
 ---
 
@@ -217,6 +223,18 @@ Claimed complete 2026-06-25 in a preview sandbox: Next.js 15 + Tailwind v4 + Nex
 ---
 
 ## 8. Session Log (newest first)
+
+### 2026-07-19 (midday) — P0 closed; P1 security batch shipped (a2e5c14)
+- **Founder SSH timeout diagnosed: wrong IP.** Daniel was SSHing to `170.64.169.239`; this droplet is **`170.64.177.20`** (`ssh myfibase` alias). Server side verified clean: sshd active, ufw allows 22, fail2ban has never banned his IPs (197.239.11.74 / 102.34.18.9)
+- P0-D closed: `uptime.yml` fired on GitHub's cron 3× today, all success → **P0 A–E all verified done**
+- P1 security batch (committed `a2e5c14`, CI-built image deployed):
+  - Login lockout: Redis failure counters (20/IP, 10/acct per 15min, failures only, success heals acct); unit-tested
+  - CORS pinned via `CORS_ALLOWED_ORIGINS` (unpinned origins get no headers; dev echo only with zero pins + development env)
+  - Webhook source-IP allowlist middleware (`ZENGAPAY_WEBHOOK_IPS`, empty=disabled) — activate when ZengaPay prod IPs known
+  - **Spoofing fix**: new `middleware.ClientIP` trusts only nginx-set `X-Real-IP`; payment rate limiter previously trusted the client-appendable first XFF element (forgeable to evade the 10/5min limit)
+- Adminer removed (container + image + compose block) — P1 exposure closed; psql via docker exec documented in compose
+- `radius-sync.sh`: live HUP experiment proved reload cannot pick up SQL clients ("HUP - No files changed. Ignoring" from MainPID; the journal "Adding client" lines were the `-C` checker process) → restart kept, documented, plus `freeradius -C` gate before restart
+- Remaining P1 (need external inputs): offsite backups (DO Spaces creds), email infra (provider choice), ToS/privacy/fee pages, dashboard XSS audit
 
 ### 2026-07-19 (evening) — P0-E integration test shipped; P0-C verified; P0-D watchdog cron installed
 - P0-E done: `api/integration/integration_test.go` (build tag `integration`) exercises the real handler stack against ephemeral Postgres+Redis — pay→webhook→session grant, RADIUS rows, confirmed payment, 3% agent commission, webhook dedup, bad-signature 401, status endpoint. Green locally (2s) and in CI (`d5a9032`)
