@@ -21,6 +21,7 @@ import (
 // changes, opens UFW for the router IP, and restarts FreeRADIUS.
 
 const radiusServerIP = "170.64.177.20" // routers speak RADIUS to the droplet directly, not via Cloudflare
+const radiusTunnelIP = "10.77.0.1"     // wg0 on the droplet; tunnel devices speak RADIUS here (works behind CGNAT)
 
 func genDeviceSecret() (string, error) {
 	const charset = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -39,6 +40,7 @@ type deviceRow struct {
 	Name       string     `json:"name"`
 	Type       string     `json:"type"`
 	NasIP      string     `json:"nas_ip"`
+	WgIP       string     `json:"wg_ip"`
 	Secret     string     `json:"radius_secret"`
 	LocationID string     `json:"location_id"`
 	Location   string     `json:"location_name"`
@@ -49,14 +51,25 @@ type deviceRow struct {
 	CreatedAt  time.Time  `json:"created_at"`
 }
 
+// radiusIPs returns both addresses a router may appear under in the RADIUS
+// tables: its public NAS IP and, once RADIUS moves onto the management tunnel,
+// its wg IP. Falls back to the NAS IP when no tunnel is provisioned so the
+// pair is always safe to bind as two inet query params.
+func (d *deviceRow) radiusIPs() (string, string) {
+	if d.WgIP == "" {
+		return d.NasIP, d.NasIP
+	}
+	return d.NasIP, d.WgIP
+}
+
 func (h *Handler) deviceByID(ctx context.Context, deviceID, tenantID string) (*deviceRow, error) {
 	var d deviceRow
 	err := h.db.QueryRow(ctx, `
-		SELECT d.id, COALESCE(d.name,''), d.type, COALESCE(host(d.nas_ip),''), d.radius_secret,
+		SELECT d.id, COALESCE(d.name,''), d.type, COALESCE(host(d.nas_ip),''), COALESCE(host(d.wg_ip),''), d.radius_secret,
 		       l.id, l.name, l.portal_slug, d.online, d.last_seen, d.last_ping, d.created_at
 		FROM devices d JOIN locations l ON d.location_id = l.id
 		WHERE d.id = $1 AND l.tenant_id = $2 LIMIT 1
-	`, deviceID, tenantID).Scan(&d.ID, &d.Name, &d.Type, &d.NasIP, &d.Secret,
+	`, deviceID, tenantID).Scan(&d.ID, &d.Name, &d.Type, &d.NasIP, &d.WgIP, &d.Secret,
 		&d.LocationID, &d.Location, &d.PortalSlug, &d.Online, &d.LastSeen, &d.LastPing, &d.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -219,6 +232,9 @@ func (h *Handler) UpdateDevice(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		_, err = tx.Exec(ctx, `UPDATE nas SET nasname=$1, description=$2 WHERE shortname=$3`, ip.String(), req.Name, "mfb-"+deviceID[:8])
 	}
+	if err == nil {
+		_, err = tx.Exec(ctx, `UPDATE nas SET description=$1 WHERE shortname=$2`, req.Name+" (tunnel)", "mfb-"+deviceID[:8]+"-wg")
+	}
 	if err != nil || tx.Commit(ctx) != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", "could not update device")
 		return
@@ -242,7 +258,7 @@ func (h *Handler) DeleteDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback(ctx)
-	tx.Exec(ctx, `DELETE FROM nas WHERE shortname=$1`, "mfb-"+deviceID[:8])
+	tx.Exec(ctx, `DELETE FROM nas WHERE shortname IN ($1, $2)`, "mfb-"+deviceID[:8], "mfb-"+deviceID[:8]+"-wg")
 	tx.Exec(ctx, `DELETE FROM devices WHERE id=$1`, deviceID)
 	if err := tx.Commit(ctx); err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", "could not remove device")
@@ -324,6 +340,16 @@ func (h *Handler) DeviceScript(w http.ResponseWriter, r *http.Request) {
 
 	if h.cfg.WGServerPublicKey != "" {
 		if wgIP, wgPriv, err := h.ensureWG(ctx, d.ID); err == nil {
+			// Second RADIUS client row for the router's tunnel IP, alongside the
+			// public-IP row — auth works whichever path the router speaks from
+			// (RouterOS 6 never runs steps 6-7 and stays on the public IP).
+			if _, err := h.db.Exec(ctx, `
+				INSERT INTO nas (nasname, shortname, type, secret, description)
+				SELECT $1, $2, 'mikrotik', $3, $4
+				WHERE NOT EXISTS (SELECT 1 FROM nas WHERE shortname = $2)
+			`, wgIP, "mfb-"+d.ID[:8]+"-wg", d.Secret, d.Name+" (tunnel)"); err != nil {
+				log.Printf("tunnel nas row failed for device %s: %v", d.ID, err)
+			}
 			script += fmt.Sprintf(`
 # 6. Management tunnel (RouterOS 7 or newer; safe to skip on RouterOS 6 —
 #    everything above still works). Lets myFiPay monitor your router and end
@@ -331,7 +357,13 @@ func (h *Handler) DeviceScript(w http.ResponseWriter, r *http.Request) {
 /interface/wireguard add name=myfipay-mgmt private-key="%s" comment="myFiPay"
 /ip/address add address=%s/16 interface=myfipay-mgmt
 /interface/wireguard/peers add interface=myfipay-mgmt public-key="%s" endpoint-address=%s endpoint-port=%s allowed-address=10.77.0.1/32 persistent-keepalive=25s comment="myFiPay"
-`, wgPriv, wgIP, h.cfg.WGServerPublicKey, h.cfg.WGEndpointHost, h.cfg.WGEndpointPort)
+
+# 7. Move RADIUS onto the tunnel — auth keeps working behind CGNAT and across
+#    ISP address changes. If "Test connection" fails after this, fall back:
+#    /radius set [find comment="myFiPay"] address=%s src-address=0.0.0.0
+/radius set [find comment="myFiPay"] address=%s src-address=%s
+`, wgPriv, wgIP, h.cfg.WGServerPublicKey, h.cfg.WGEndpointHost, h.cfg.WGEndpointPort,
+				radiusServerIP, radiusTunnelIP, wgIP)
 		} else {
 			log.Printf("wg provision failed for device %s: %v", d.ID, err)
 		}
@@ -358,8 +390,10 @@ func (h *Handler) DeviceStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var lastAuth, lastAcct *time.Time
-	h.db.QueryRow(ctx, `SELECT MAX(authdate) FROM radpostauth WHERE nasipaddress = $1`, d.NasIP).Scan(&lastAuth)
-	h.db.QueryRow(ctx, `SELECT MAX(COALESCE(acctupdatetime, acctstarttime)) FROM radacct WHERE nasipaddress = $1`, d.NasIP).Scan(&lastAcct)
+	// A tunnel router shows up in RADIUS tables under its wg IP, not its public one
+	nasIP, wgIP := d.radiusIPs()
+	h.db.QueryRow(ctx, `SELECT MAX(authdate) FROM radpostauth WHERE nasipaddress IN ($1, $2)`, nasIP, wgIP).Scan(&lastAuth)
+	h.db.QueryRow(ctx, `SELECT MAX(COALESCE(acctupdatetime, acctstarttime)) FROM radacct WHERE nasipaddress IN ($1, $2)`, nasIP, wgIP).Scan(&lastAcct)
 
 	var lastSeen *time.Time
 	if lastAuth != nil {
@@ -402,6 +436,7 @@ func (h *Handler) DeviceClients(w http.ResponseWriter, r *http.Request) {
 		respond(w, http.StatusOK, []struct{}{})
 		return
 	}
+	nasIP, wgIP := d.radiusIPs()
 
 	type clientRow struct {
 		Username    string     `json:"username"`
@@ -419,10 +454,10 @@ func (h *Handler) DeviceClients(w http.ResponseWriter, r *http.Request) {
 		       acctstarttime, acctupdatetime, COALESCE(acctsessiontime,0),
 		       COALESCE(acctinputoctets,0), COALESCE(acctoutputoctets,0)
 		FROM radacct
-		WHERE nasipaddress = $1 AND acctstoptime IS NULL
+		WHERE nasipaddress IN ($1, $2) AND acctstoptime IS NULL
 		ORDER BY acctstarttime DESC NULLS LAST
 		LIMIT 200
-	`, d.NasIP)
+	`, nasIP, wgIP)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "DB_ERROR", "query failed")
 		return
