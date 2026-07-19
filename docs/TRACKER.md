@@ -182,6 +182,7 @@ Framing: treat myFiBase as a pure self-serve billing SaaS — even Daniel signs 
 | Router heartbeat live: cron sets `devices.last_ping` each minute (18:56 tick was cron, not manual); CHR `online:true` from ping alone with RADIUS 7h stale — the exact false-offline case | ✅ | 2026-07-19 |
 | Deploy `718f638` via CI image: /health + site 200; authed `/api/devices` serves `last_ping`; live dashboard.js has new status texts | ✅ | 2026-07-19 |
 | Logrotate added for `/var/log/myfibase-*.log` (weekly/4, maxsize 10M) — cron logs were unrotated; dry-run picks up all three | ✅ | 2026-07-19 |
+| Per-router Clients view live (`8765865`): `/api/devices/{id}/clients` empty `[]` for CHR (no open sessions) and correct row for a labeled test radacct insert (deleted after); dashboard v=8 serving modal | ✅ | 2026-07-19 |
 
 ---
 
