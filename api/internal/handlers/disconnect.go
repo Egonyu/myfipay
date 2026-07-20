@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"log"
+	"net"
 	"time"
 
 	"github.com/myfibase/myfibase/internal/radius"
@@ -23,7 +24,8 @@ type disconnectResult struct {
 // are skipped.
 func (h *Handler) disconnectLiveSessions(ctx context.Context, username string) []disconnectResult {
 	rows, err := h.db.Query(ctx, `
-		SELECT ra.acctsessionid, host(ra.nasipaddress), ra.callingstationid, COALESCE(n.secret, '')
+		SELECT ra.acctsessionid, host(ra.nasipaddress), ra.callingstationid,
+		       COALESCE(host(ra.framedipaddress), ''), COALESCE(n.secret, '')
 		FROM radacct ra
 		LEFT JOIN nas n ON n.nasname = host(ra.nasipaddress)
 		WHERE ra.username = $1 AND ra.acctstoptime IS NULL
@@ -41,8 +43,12 @@ func (h *Handler) disconnectLiveSessions(ctx context.Context, username string) [
 	var targets []target
 	for rows.Next() {
 		var t target
-		if err := rows.Scan(&t.sess.AcctSessionID, &t.nasIP, &t.sess.CallingStationID, &t.secret); err == nil {
+		var framedIP string
+		if err := rows.Scan(&t.sess.AcctSessionID, &t.nasIP, &t.sess.CallingStationID, &framedIP, &t.secret); err == nil {
 			t.sess.Username = username
+			// RouterOS 7.16 hotspot NAKs (406) any Disconnect-Request that
+			// lacks the client's Framed-IP-Address, whatever else matches.
+			t.sess.FramedIP = net.ParseIP(framedIP)
 			targets = append(targets, t)
 		}
 	}

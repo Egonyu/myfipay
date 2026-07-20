@@ -1,7 +1,9 @@
 package radius
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
 	"crypto/md5"
 	"encoding/binary"
 	"net"
@@ -71,6 +73,7 @@ var testSession = Session{
 	Username:         "256700000001",
 	AcctSessionID:    "81f00001",
 	CallingStationID: "AA:BB:CC:DD:EE:FF",
+	FramedIP:         net.IPv4(10, 99, 0, 48),
 }
 
 func TestDisconnectACK(t *testing.T) {
@@ -133,7 +136,56 @@ func TestBuildDisconnectPacket(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pkt2) != 20+3 {
-		t.Fatalf("expected only User-Name attr, packet size %d", len(pkt2))
+	if len(pkt2) != 20+3+18 {
+		t.Fatalf("expected User-Name + Message-Authenticator attrs, packet size %d", len(pkt2))
+	}
+}
+
+// RouterOS 7.16 hotspot NAKs (406 Unsupported Extension) any Disconnect-Request
+// without the client's Framed-IP-Address — verified live against CHR. The
+// attribute must be the 4-byte address, and absent entirely when unknown.
+func TestBuildDisconnectFramedIP(t *testing.T) {
+	pkt, err := buildDisconnect(7, "s3cret", Session{Username: "u", FramedIP: net.IPv4(10, 99, 0, 48)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{attrFramedIPAddress, 6, 10, 99, 0, 48}
+	if !bytes.Contains(pkt[20:], want) {
+		t.Fatalf("Framed-IP-Address attribute %v not found in %v", want, pkt[20:])
+	}
+	pkt2, err := buildDisconnect(7, "s3cret", Session{Username: "u", FramedIP: nil})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(pkt2[20:], []byte{attrFramedIPAddress, 6}) {
+		t.Fatal("nil FramedIP must omit the Framed-IP-Address attribute")
+	}
+}
+
+// Message-Authenticator (RFC 3579 via RFC 5176): HMAC-MD5 over the packet with
+// the Request Authenticator field and the attribute's own value zeroed. RouterOS
+// with require-message-auth silently NAKs requests without a valid one.
+func TestBuildDisconnectMessageAuthenticator(t *testing.T) {
+	secret := "s3cret"
+	pkt, err := buildDisconnect(7, secret, testSession)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := len(pkt)
+	if pkt[n-18] != attrMessageAuthenticator || pkt[n-17] != 18 {
+		t.Fatalf("last attribute is not a Message-Authenticator: type=%d len=%d", pkt[n-18], pkt[n-17])
+	}
+	zeroed := make([]byte, n)
+	copy(zeroed, pkt)
+	for i := 4; i < 20; i++ {
+		zeroed[i] = 0
+	}
+	for i := n - 16; i < n; i++ {
+		zeroed[i] = 0
+	}
+	mac := hmac.New(md5.New, []byte(secret))
+	mac.Write(zeroed)
+	if !hmac.Equal(mac.Sum(nil), pkt[n-16:]) {
+		t.Fatal("Message-Authenticator HMAC does not verify")
 	}
 }
